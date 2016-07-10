@@ -9,11 +9,11 @@ package opt
 
 import scala.collection.immutable.IntMap
 import scala.reflect.internal.util.{NoPosition, Position}
-import scala.tools.asm.{Opcodes, Type, Handle}
+import scala.tools.asm.{Handle, Opcodes, Type}
 import scala.tools.asm.tree._
 import scala.collection.{concurrent, mutable}
 import scala.collection.JavaConverters._
-import scala.tools.nsc.backend.jvm.BTypes.InternalName
+import scala.tools.nsc.backend.jvm.BTypes.{InternalName, MethodInlineInfo}
 import scala.tools.nsc.backend.jvm.BackendReporting._
 import scala.tools.nsc.backend.jvm.analysis._
 import BytecodeUtils._
@@ -67,6 +67,7 @@ class CallGraph[BT <: BTypes](val btypes: BT) {
   }
 
   def containsCallsite(callsite: Callsite): Boolean = callsites(callsite.callsiteMethod) contains callsite.callsiteInstruction
+  def findCallSite(method: MethodNode, call: MethodInsnNode): Option[Callsite] = callsites.getOrElse(method, Map.empty).get(call)
 
   def removeClosureInstantiation(indy: InvokeDynamicInsnNode, methodNode: MethodNode): Option[ClosureInstantiation] = {
     val methodClosureInits = closureInstantiations(methodNode)
@@ -356,7 +357,7 @@ class CallGraph[BT <: BTypes](val btypes: BT) {
       "Invocation of" +
         s" ${callee.map(_.calleeDeclarationClass.internalName).getOrElse("?")}.${callsiteInstruction.name + callsiteInstruction.desc}" +
         s"@${callsiteMethod.instructions.indexOf(callsiteInstruction)}" +
-        s" in ${callsiteClass.internalName}.${callsiteMethod.name}"
+        s" in ${callsiteClass.internalName}.${callsiteMethod.name}${callsiteMethod.desc}"
   }
 
   final case class ClonedCallsite(callsite: Callsite, clonedWhenInlining: Callsite)
@@ -429,7 +430,7 @@ class CallGraph[BT <: BTypes](val btypes: BT) {
     def unapply(insn: AbstractInsnNode): Option[(InvokeDynamicInsnNode, Type, Handle, Type)] = insn match {
       case indy: InvokeDynamicInsnNode if indy.bsm == metafactoryHandle || indy.bsm == altMetafactoryHandle =>
         indy.bsmArgs match {
-          case Array(samMethodType: Type, implMethod: Handle, instantiatedMethodType: Type, xs@_*) => // xs binding because IntelliJ gets confused about _@_*
+          case Array(samMethodType: Type, implMethod: Handle, instantiatedMethodType: Type, _@_*) =>
             // LambdaMetaFactory performs a number of automatic adaptations when invoking the lambda
             // implementation method (casting, boxing, unboxing, and primitive widening, see Javadoc).
             //
