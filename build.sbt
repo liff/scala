@@ -56,9 +56,9 @@
 import VersionUtil._
 
 // Scala dependencies:
-val scalaParserCombinatorsDep    = scalaDep("org.scala-lang.modules", "scala-parser-combinators")
 val scalaSwingDep                = scalaDep("org.scala-lang.modules", "scala-swing")
 val scalaXmlDep                  = scalaDep("org.scala-lang.modules", "scala-xml")
+val scalaParserCombinatorsDep    = scalaDep("org.scala-lang.modules", "scala-parser-combinators")
 val partestDep                   = scalaDep("org.scala-lang.modules", "scala-partest",              versionProp = "partest")
 
 // Non-Scala dependencies:
@@ -398,7 +398,7 @@ lazy val compiler = configureAsSubproject(project)
     description := "Scala Compiler",
     libraryDependencies ++= Seq(antDep, asmDep),
     // These are only needed for the POM:
-    libraryDependencies ++= Seq(scalaXmlDep, scalaParserCombinatorsDep, jlineDep % "optional"),
+    libraryDependencies ++= Seq(scalaXmlDep, jlineDep % "optional"),
     // this a way to make sure that classes from interactive and scaladoc projects
     // end up in compiler jar (that's what Ant build does)
     // we need to use LocalProject references (with strings) to deal with mutual recursion
@@ -427,7 +427,6 @@ lazy val compiler = configureAsSubproject(project)
     Osgi.headers ++= Seq(
       "Import-Package" -> ("jline.*;resolution:=optional," +
                            "org.apache.tools.ant.*;resolution:=optional," +
-                           "scala.util.parsing.*;version=\"${range;[====,====];"+versionNumber("scala-parser-combinators")+"}\";resolution:=optional," +
                            "scala.xml.*;version=\"${range;[====,====];"+versionNumber("scala-xml")+"}\";resolution:=optional," +
                            "scala.*;version=\"${range;[==,=+);${ver}}\"," +
                            "*"),
@@ -521,7 +520,7 @@ lazy val scaladoc = configureAsSubproject(project)
   .settings(
     name := "scala-compiler-doc",
     description := "Scala Documentation Generator",
-    libraryDependencies ++= Seq(scalaXmlDep, scalaParserCombinatorsDep, partestDep),
+    libraryDependencies ++= Seq(scalaXmlDep, partestDep),
     includeFilter in unmanagedResources in Compile := "*.html" | "*.css" | "*.gif" | "*.png" | "*.js" | "*.txt" | "*.svg" | "*.eot" | "*.woff" | "*.ttf"
   )
   .dependsOn(compiler)
@@ -769,6 +768,32 @@ lazy val root: Project = (project in file("."))
       GenerateAnyVals.run(dir.getAbsoluteFile)
       state
     },
+    testAll := {
+      val results = ScriptCommands.sequence[Result[Unit]](List(
+        (Keys.test in Test in junit).result,
+        (testOnly in IntegrationTest in testP).toTask(" -- run pos neg jvm").result,
+        (testOnly in IntegrationTest in testP).toTask(" -- res scalap specialized scalacheck").result,
+        (testOnly in IntegrationTest in testP).toTask(" -- instrumented presentation").result,
+        (testOnly in IntegrationTest in testP).toTask(" -- --srcpath scaladoc").result,
+        (Keys.test in Test in osgiTestFelix).result,
+        (Keys.test in Test in osgiTestEclipse).result,
+        (MiMa.mima in library).result,
+        (MiMa.mima in reflect).result,
+        Def.task(()).dependsOn( // Run these in parallel:
+          doc in Compile in library,
+          doc in Compile in reflect,
+          doc in Compile in compiler,
+          doc in Compile in scalap
+        ).result
+      )).value
+      val failed = results.map(_.toEither).collect { case Left(i) => i }
+      if(failed.nonEmpty) {
+        val log = streams.value.log
+        log.error(s"${failed.size} of ${results.length} test tasks failed:")
+        failed.foreach(i => log.error(s"  - $i"))
+        throw new RuntimeException
+      }
+    },
     antStyle := false,
     incOptions := incOptions.value.withNameHashing(!antStyle.value).withAntStyle(antStyle.value)
   )
@@ -838,6 +863,7 @@ lazy val buildDirectory = settingKey[File]("The directory where all build produc
 lazy val mkBin = taskKey[Seq[File]]("Generate shell script (bash or Windows batch).")
 lazy val mkQuick = taskKey[File]("Generate a full build, including scripts, in build/quick")
 lazy val mkPack = taskKey[File]("Generate a full build, including scripts, in build/pack")
+lazy val testAll = taskKey[Unit]("Run all test tasks sequentially")
 
 // Defining these settings is somewhat redundant as we also redefine settings that depend on them.
 // However, IntelliJ's project import works better when these are set correctly.
@@ -936,7 +962,7 @@ intellij := {
 
   val modules: List[(String, Seq[File])] = {
     // for the sbt build module, the dependencies are fetched from the project's build using sbt-buildinfo
-    val buildModule = ("scala-build", scalabuild.BuildInfo.buildClasspath.split(":").toSeq.map(new File(_)))
+    val buildModule = ("scala-build", scalabuild.BuildInfo.buildClasspath.split(java.io.File.pathSeparator).toSeq.map(new File(_)))
     // `sbt projects` lists all modules in the build
     buildModule :: List(
       moduleDeps(compilerP).value,
@@ -1015,12 +1041,14 @@ intellij := {
   var continue = false
   if (!ipr.exists) {
     scala.Console.print(s"Could not find src/intellij/scala.ipr. Create new project files from src/intellij/*.SAMPLE (y/N)? ")
+    scala.Console.flush()
     if (scala.Console.readLine() == "y") {
       intellijCreateFromSample((baseDirectory in ThisBuild).value)
       continue = true
     }
   } else {
     scala.Console.print("Update library classpaths in the current src/intellij/scala.ipr (y/N)? ")
+    scala.Console.flush()
     continue = scala.Console.readLine() == "y"
   }
   if (continue) {
@@ -1045,6 +1073,7 @@ lazy val intellijFromSample = taskKey[Unit]("Create fresh IntelliJ project files
 intellijFromSample := {
   val s = streams.value
   scala.Console.print(s"Create new project files from src/intellij/*.SAMPLE (y/N)? ")
+  scala.Console.flush()
   if (scala.Console.readLine() == "y")
     intellijCreateFromSample((baseDirectory in ThisBuild).value)
   else
@@ -1062,6 +1091,7 @@ lazy val intellijToSample = taskKey[Unit]("Update src/intellij/*.SAMPLE using th
 intellijToSample := {
   val s = streams.value
   scala.Console.print(s"Update src/intellij/*.SAMPLE using the current IntelliJ project files (y/N)? ")
+  scala.Console.flush()
   if (scala.Console.readLine() == "y") {
     val basedir = (baseDirectory in ThisBuild).value
     val existing = basedir / "src/intellij" * "*.SAMPLE"

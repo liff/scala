@@ -61,7 +61,7 @@ object VersionUtil {
     val (base, suffix) = {
       val (b, s) = (baseVersion.value, baseVersionSuffix.value)
       if(s == "SPLIT") {
-        val split = """([\w+\.]+)(-[\w+\.]+)??""".r
+        val split = """([\w+\.]+)(-[\w+\.-]+)??""".r
         val split(b2, sOrNull) = b
         (b2, Option(sOrNull).map(_.drop(1)).getOrElse(""))
       } else (b, s)
@@ -94,7 +94,7 @@ object VersionUtil {
   }
 
   private lazy val generateBuildCharacterPropertiesFileImpl: Def.Initialize[Task[File]] = Def.task {
-    writeProps(versionProperties.value.toMap, (baseDirectory in ThisBuild).value / "buildcharacter.properties")
+    writeProps(versionProperties.value.toMap ++ versionProps, (baseDirectory in ThisBuild).value / "buildcharacter.properties")
   }
 
   private def writeProps(m: Map[String, String], propFile: File): File = {

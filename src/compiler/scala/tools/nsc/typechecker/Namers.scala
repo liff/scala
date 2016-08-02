@@ -1346,7 +1346,7 @@ trait Namers extends MethodSynthesis {
             val defRhs = rvparam.rhs
 
             val defaultTree = atPos(vparam.pos.focus) {
-              DefDef(Modifiers(paramFlagsToDefaultGetter(meth.flags)) | oflag, name, defTparams, defVparamss, defTpt, defRhs)
+              DefDef(Modifiers(paramFlagsToDefaultGetter(meth.flags), ddef.mods.privateWithin) | oflag, name, defTparams, defVparamss, defTpt, defRhs)
             }
             if (!isConstr)
               methOwner.resetFlag(INTERFACE) // there's a concrete member now
@@ -1764,7 +1764,7 @@ trait Namers extends MethodSynthesis {
    *  bugs waiting to be reported? If not, why not? When exactly do we need to
    *  call this method?
    */
-  def companionSymbolOf(original: Symbol, ctx: Context): Symbol = {
+  def companionSymbolOf(original: Symbol, ctx: Context): Symbol = if (original == NoSymbol) NoSymbol else {
     val owner = original.owner
     // SI-7264 Force the info of owners from previous compilation runs.
     //         Doing this generally would trigger cycles; that's what we also
