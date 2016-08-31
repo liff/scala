@@ -122,7 +122,17 @@ abstract class BTypes {
    * inlining: when inlining an indyLambda instruction into a class, we need to make sure the class
    * has the method.
    */
-  val indyLambdaHosts: mutable.Set[InternalName] = recordPerRunCache(mutable.Set.empty)
+  val indyLambdaImplMethods: mutable.AnyRefMap[InternalName, mutable.LinkedHashSet[asm.Handle]] = recordPerRunCache(mutable.AnyRefMap())
+  def addIndyLambdaImplMethod(hostClass: InternalName, handle: Seq[asm.Handle]): Unit = {
+    if (handle.nonEmpty)
+      indyLambdaImplMethods.getOrElseUpdate(hostClass, mutable.LinkedHashSet()) ++= handle
+  }
+  def getIndyLambdaImplMethods(hostClass: InternalName): Iterable[asm.Handle] = {
+    indyLambdaImplMethods.getOrNull(hostClass) match {
+      case null => Nil
+      case xs => xs
+    }
+  }
 
   /**
    * Obtain the BType for a type descriptor or internal name. For class descriptors, the ClassBType
@@ -1145,8 +1155,7 @@ object BTypes {
   final case class InlineInfo(isEffectivelyFinal: Boolean,
                               sam: Option[String],
                               methodInfos: Map[String, MethodInlineInfo],
-                              warning: Option[ClassInlineInfoWarning]) {
-  }
+                              warning: Option[ClassInlineInfoWarning])
 
   val EmptyInlineInfo = InlineInfo(false, None, Map.empty, None)
 
@@ -1164,4 +1173,7 @@ object BTypes {
   // no static way (without symbol table instance) to get to nme.ScalaATTR / ScalaSignatureATTR
   val ScalaAttributeName    = "Scala"
   val ScalaSigAttributeName = "ScalaSig"
+
+  // when inlining, local variable names of the callee are prefixed with the name of the callee method
+  val InlinedLocalVariablePrefixMaxLenght = 128
 }

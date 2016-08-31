@@ -142,6 +142,7 @@ class Inliner[BT <: BTypes](val btypes: BT) {
           elided += r
         else
           result += r
+        ()
       }
       result.toList
     }
@@ -277,7 +278,7 @@ class Inliner[BT <: BTypes](val btypes: BT) {
       }
       case _ => false
     }
-    val (clonedInstructions, instructionMap, hasSerializableClosureInstantiation) = cloneInstructions(callee, labelsMap, keepLineNumbers = sameSourceFile)
+    val (clonedInstructions, instructionMap, targetHandles) = cloneInstructions(callee, labelsMap, keepLineNumbers = sameSourceFile)
 
     // local vars in the callee are shifted by the number of locals at the callsite
     val localVarShift = callsiteMethod.maxLocals
@@ -382,7 +383,7 @@ class Inliner[BT <: BTypes](val btypes: BT) {
     callsiteMethod.instructions.insert(callsiteInstruction, clonedInstructions)
     callsiteMethod.instructions.remove(callsiteInstruction)
 
-    callsiteMethod.localVariables.addAll(cloneLocalVariableNodes(callee, labelsMap, callee.name + "_", localVarShift).asJava)
+    callsiteMethod.localVariables.addAll(cloneLocalVariableNodes(callee, labelsMap, callee.name, localVarShift).asJava)
     // prepend the handlers of the callee. the order of handlers matters: when an exception is thrown
     // at some instruction, the first handler guarding that instruction and having a matching exception
     // type is executed. prepending the callee's handlers makes sure to test those handlers first if
@@ -405,10 +406,7 @@ class Inliner[BT <: BTypes](val btypes: BT) {
 
     callsiteMethod.maxStack = math.max(callsiteMethod.maxStack, math.max(stackHeightAtNullCheck, maxStackOfInlinedCode))
 
-    if (hasSerializableClosureInstantiation && !indyLambdaHosts(callsiteClass.internalName)) {
-      indyLambdaHosts += callsiteClass.internalName
-      addLambdaDeserialize(byteCodeRepository.classNode(callsiteClass.internalName).get)
-    }
+    addIndyLambdaImplMethod(callsiteClass.internalName, targetHandles)
 
     callGraph.addIfMissing(callee, calleeDeclarationClass)
 

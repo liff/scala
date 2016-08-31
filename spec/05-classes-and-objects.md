@@ -27,7 +27,7 @@ SelfType        ::=  id [`:' Type] `=>'
                  |   this `:' Type `=>'
 ```
 
-A template defines the type signature, behavior and initial state of a
+A _template_ defines the type signature, behavior and initial state of a
 trait or class of objects or of a single object. Templates form part of
 instance creation expressions, class definitions, and object
 definitions.  A template
@@ -344,8 +344,8 @@ $M'$:
 - If $M$ and $M'$ are both concrete value definitions, then either none
   of them is marked `lazy` or both must be marked `lazy`.
 
-A stable member can only be overridden by a stable member.
-For example, this is not allowed:
+- A stable member can only be overridden by a stable member.
+  For example, this is not allowed:
 
 ```scala
 class X { val stable = 1}
@@ -972,7 +972,7 @@ TraitDef         ::=  id [TypeParamClause] TraitTemplateOpt
 TraitTemplateOpt ::=  `extends' TraitTemplate | [[`extends'] TemplateBody]
 ```
 
-A trait is a class that is meant to be added to some other class
+A _trait_ is a class that is meant to be added to some other class
 as a mixin. Unlike normal classes, traits cannot have
 constructor parameters. Furthermore, no constructor arguments are
 passed to the superclass of the trait. This is not necessary as traits are
@@ -1074,7 +1074,7 @@ in `MyTable`.
 ObjectDef       ::=  id ClassTemplate
 ```
 
-An object definition defines a single object of a new class. Its
+An _object definition_ defines a single object of a new class. Its
 most general form is
 `object $m$ extends $t$`. Here,
 $m$ is the name of the object to be defined, and

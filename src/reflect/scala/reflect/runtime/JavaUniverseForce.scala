@@ -46,6 +46,7 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     this.NoInlineCallsiteAttachment
     this.InlineCallsiteAttachment
     this.OuterArgCanBeElided
+    this.UseInvokeSpecial
     this.noPrint
     this.typeDebug
     this.Range
@@ -247,7 +248,6 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.SymbolModule
     definitions.StringAddClass
     definitions.ScalaNumberClass
-    definitions.TraitSetterAnnotationClass
     definitions.DelayedInitClass
     definitions.TypeConstraintClass
     definitions.SingletonClass

@@ -416,7 +416,7 @@ class InlinerTest extends BytecodeTesting {
       """B::flop()I is annotated @inline but could not be inlined:
         |Failed to check if B::flop()I can be safely inlined to B without causing an IllegalAccessError. Checking instruction INVOKESTATIC A.bar ()I failed:
         |The method bar()I could not be found in the class A or any of its parents.
-        |Note that the parent class A is defined in a Java source (mixed compilation), no bytecode is available.""".stripMargin
+        |Note that class A is defined in a Java source (mixed compilation), no bytecode is available.""".stripMargin
 
     var c = 0
     val List(b) = compile(scalaCode, List((javaCode, "A.java")), allowMessage = i => {c += 1; i.msg contains warn})
@@ -518,7 +518,7 @@ class InlinerTest extends BytecodeTesting {
     val List(c, oMirror, oModule, t) = compile(code, allowMessage = i => {count += 1; i.msg contains warn})
     assert(count == 1, count)
 
-    assertNoInvoke(getMethod(t, "f$"))
+    assertNoInvoke(getMethod(t, "f"))
 
     assertNoInvoke(getMethod(c, "t1"))
     assertNoInvoke(getMethod(c, "t2"))
@@ -544,9 +544,9 @@ class InlinerTest extends BytecodeTesting {
 
     val List(assembly, c, t) = compile(code)
 
-    assertNoInvoke(getMethod(t, "f$"))
+    assertNoInvoke(getMethod(t, "f"))
 
-    assertNoInvoke(getMethod(assembly, "n$"))
+    assertNoInvoke(getMethod(assembly, "n"))
 
     assertNoInvoke(getMethod(c, "t1"))
     assertNoInvoke(getMethod(c, "t2"))
@@ -622,8 +622,8 @@ class InlinerTest extends BytecodeTesting {
     val List(ca, cb, t1, t2a, t2b) = compile(code, allowMessage = i => {count += 1; i.msg contains warning})
     assert(count == 4, count) // see comments, f is not inlined 4 times
 
-    assertNoInvoke(getMethod(t2a, "g2a$"))
-    assertInvoke(getMethod(t2b, "g2b$"), "T1", "f")
+    assertNoInvoke(getMethod(t2a, "g2a"))
+    assertInvoke(getMethod(t2b, "g2b"), "T1", "f")
 
     assertInvoke(getMethod(ca, "m1a"), "T1", "f")
     assertNoInvoke(getMethod(ca, "m2a"))            // no invoke, see comment on def g2a
@@ -682,8 +682,8 @@ class InlinerTest extends BytecodeTesting {
         |}
       """.stripMargin
     val List(c, t) = compile(code)
-    val t1 = getMethod(t, "t1$")
-    val t2 = getMethod(t, "t2$")
+    val t1 = getMethod(t, "t1")
+    val t2 = getMethod(t, "t2")
     val cast = TypeOp(CHECKCAST, "C")
     Set(t1, t2).foreach(m => assert(m.instructions.contains(cast), m.instructions))
   }
@@ -819,7 +819,7 @@ class InlinerTest extends BytecodeTesting {
     val warn =
       """failed to determine if <init> should be inlined:
         |The method <init>()V could not be found in the class A$Inner or any of its parents.
-        |Note that the parent class A$Inner could not be found on the classpath.""".stripMargin
+        |Note that class A$Inner could not be found on the classpath.""".stripMargin
 
     var c = 0
 
@@ -1586,5 +1586,42 @@ class InlinerTest extends BytecodeTesting {
       """.stripMargin
     val List(c, t) = compile(code)
     assertNoIndy(getMethod(c, "t1"))
+  }
+
+  @Test
+  def limitInlinedLocalVariableNames(): Unit = {
+    val code =
+      """class C {
+        |  def f(x: Int): Int = x
+        |  @inline final def methodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(param: Int) =
+        |    f(param)
+        |  @inline final def anotherMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(param: Int) =
+        |    methodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(f(param))
+        |  @inline final def oneMoreMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(param: Int) =
+        |    anotherMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(f(param))
+        |  @inline final def yetAnotherMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(param: Int) =
+        |    oneMoreMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(f(param))
+        |  @inline final def oneLastMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(param: Int) =
+        |    yetAnotherMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(f(param))
+        |  def t(p: Int) =
+        |    oneLastMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(f(p)) +
+        |    oneLastMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence(f(p))
+        |}
+      """.stripMargin
+
+    val List(c) = compile(code)
+    assertEquals(getAsmMethod(c, "t").localVariables.asScala.toList.map(l => (l.name, l.index)).sortBy(_._2),List(
+      ("this",0),
+      ("p",1),
+      ("oneLastMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence_param",2),
+      ("oneLastMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchS_yetAnotherMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFren_param",3),
+      ("oneLastMethodWithVeryVeryLongNameAlmostLik_yetAnotherMethodWithVeryVeryLongNameAlmost_oneMoreMethodWithVeryVeryLongNameAlmostLik_param",4),
+      ("oneLastMethodWithVeryVeryLongNam_yetAnotherMethodWithVeryVeryLong_oneMoreMethodWithVeryVeryLongNam_anotherMethodWithVeryVeryLongNam_param",5),
+      ("oneLastMethodWithVeryVery_yetAnotherMethodWithVeryV_oneMoreMethodWithVeryVery_anotherMethodWithVeryVery_methodWithVeryVeryLongNam_param",6),
+      ("oneLastMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchSentence_param",7),
+      ("oneLastMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFrenchS_yetAnotherMethodWithVeryVeryLongNameAlmostLikeAGermanWordOrAFren_param",8),
+      ("oneLastMethodWithVeryVeryLongNameAlmostLik_yetAnotherMethodWithVeryVeryLongNameAlmost_oneMoreMethodWithVeryVeryLongNameAlmostLik_param",9),
+      ("oneLastMethodWithVeryVeryLongNam_yetAnotherMethodWithVeryVeryLong_oneMoreMethodWithVeryVeryLongNam_anotherMethodWithVeryVeryLongNam_param",10),
+      ("oneLastMethodWithVeryVery_yetAnotherMethodWithVeryV_oneMoreMethodWithVeryVery_anotherMethodWithVeryVery_methodWithVeryVeryLongNam_param",11)))
   }
 }
