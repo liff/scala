@@ -81,7 +81,7 @@ trait Definitions extends api.StandardDefinitions {
       }
     }
 
-    private[Definitions] def classesMap[T](f: Name => T) = symbolsMap(ScalaValueClassesNoUnit, f)
+    private[Definitions] def classesMap[T](f: Name => T): Map[Symbol, T] = symbolsMap(ScalaValueClassesNoUnit, f)
     private def symbolsMap[T](syms: List[Symbol], f: Name => T): Map[Symbol, T] = mapFrom(syms)(x => f(x.name))
     private def symbolsMapFilt[T](syms: List[Symbol], p: Name => Boolean, f: Name => T) = symbolsMap(syms filter (x => p(x.name)), f)
 
@@ -93,6 +93,9 @@ trait Definitions extends api.StandardDefinitions {
     lazy val boxedClass       = classesMap(x => getClassByName(boxedName(x)))
     lazy val refClass         = classesMap(x => getRequiredClass("scala.runtime." + x + "Ref"))
     lazy val volatileRefClass = classesMap(x => getRequiredClass("scala.runtime.Volatile" + x + "Ref"))
+    lazy val lazyHolders      = symbolsMap(ScalaValueClasses, x => getClassIfDefined("scala.runtime.Lazy" + x))
+    lazy val LazyRefClass     = getClassIfDefined("scala.runtime.LazyRef")
+    lazy val LazyUnitClass    = getClassIfDefined("scala.runtime.LazyUnit")
 
     lazy val allRefClasses: Set[Symbol] = {
       refClass.values.toSet ++ volatileRefClass.values.toSet ++ Set(VolatileObjectRefClass, ObjectRefClass)
@@ -1151,7 +1154,6 @@ trait Definitions extends api.StandardDefinitions {
     lazy val ElidableMethodClass        = requiredClass[scala.annotation.elidable]
     lazy val ImplicitNotFoundClass      = requiredClass[scala.annotation.implicitNotFound]
     lazy val ImplicitAmbiguousClass     = getClassIfDefined("scala.annotation.implicitAmbiguous")
-    lazy val JUnitTestClass             = getClassIfDefined("org.junit.Test")
     lazy val MigrationAnnotationClass   = requiredClass[scala.annotation.migration]
     lazy val ScalaStrictFPAttr          = requiredClass[scala.annotation.strictfp]
     lazy val SwitchClass                = requiredClass[scala.annotation.switch]
@@ -1192,6 +1194,8 @@ trait Definitions extends api.StandardDefinitions {
     lazy val ClassTargetClass           = requiredClass[meta.companionClass]
     lazy val MethodTargetClass          = requiredClass[meta.companionMethod]    // TODO: module, moduleClass? package, packageObject?
     lazy val LanguageFeatureAnnot       = requiredClass[meta.languageFeature]
+
+    lazy val JUnitAnnotations = List("Test", "Ignore", "Before", "After", "BeforeClass", "AfterClass").map(n => getClassIfDefined("org.junit." + n))
 
     // Language features
     lazy val languageFeatureModule      = getRequiredModule("scala.languageFeature")

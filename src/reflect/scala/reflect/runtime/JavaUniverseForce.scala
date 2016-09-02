@@ -379,7 +379,6 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.ElidableMethodClass
     definitions.ImplicitNotFoundClass
     definitions.ImplicitAmbiguousClass
-    definitions.JUnitTestClass
     definitions.MigrationAnnotationClass
     definitions.ScalaStrictFPAttr
     definitions.SwitchClass
@@ -417,6 +416,7 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.ClassTargetClass
     definitions.MethodTargetClass
     definitions.LanguageFeatureAnnot
+    definitions.JUnitAnnotations
     definitions.languageFeatureModule
     definitions.metaAnnotations
     definitions.AnnotationDefaultAttr
@@ -432,6 +432,9 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.boxedClass
     definitions.refClass
     definitions.volatileRefClass
+    definitions.lazyHolders
+    definitions.LazyRefClass
+    definitions.LazyUnitClass
     definitions.allRefClasses
     definitions.UnitClass
     definitions.ByteClass
