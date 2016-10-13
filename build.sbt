@@ -88,7 +88,7 @@ lazy val publishSettings : Seq[Setting[_]] = Seq(
 globalVersionSettings
 baseVersion in Global := "2.12.0"
 baseVersionSuffix in Global := "SNAPSHOT"
-mimaReferenceVersion in Global := None
+mimaReferenceVersion in Global := Some("2.12.0-RC1")
 
 lazy val commonSettings = clearSourceAndResourceDirectories ++ publishSettings ++ Seq[Setting[_]](
   organization := "org.scala-lang",
@@ -160,7 +160,7 @@ lazy val commonSettings = clearSourceAndResourceDirectories ++ publishSettings +
         <developers>
           <developer>
             <id>lamp</id>
-            <name>EPFL LAMP</name>
+            <name>LAMP/EPFL</name>
           </developer>
           <developer>
             <id>Lightbend</id>
@@ -406,7 +406,7 @@ lazy val compiler = configureAsSubproject(project)
     ),
     // Generate the ScriptEngineFactory service definition. The Ant build does this when building
     // the JAR but sbt has no support for it and it is easier to do as a resource generator:
-    generateServiceProviderResources("javax.script.ScriptEngineFactory" -> "scala.tools.nsc.interpreter.IMain$Factory"),
+    generateServiceProviderResources("javax.script.ScriptEngineFactory" -> "scala.tools.nsc.interpreter.Scripted$Factory"),
     managedResourceDirectories in Compile := Seq((resourceManaged in Compile).value),
     fixPom(
       "/project/name" -> <name>Scala Compiler</name>,
@@ -463,7 +463,7 @@ lazy val replJlineEmbedded = Project("repl-jline-embedded", file(".") / "target"
       import collection.JavaConverters._
       val inputs: Iterator[JarJar.Entry] = {
         val repljlineClasses = (products in Compile in replJline).value.flatMap(base => Path.allSubpaths(base).map(x => (base, x._1)))
-        val jlineJAR = (dependencyClasspath in Compile).value.find(_.get(moduleID.key) == Some(jlineDep)).get.data
+        val jlineJAR = findJar((dependencyClasspath in Compile).value, jlineDep).get.data
         val jarFile = new JarFile(jlineJAR)
         val jarEntries = jarFile.entries.asScala.filterNot(_.isDirectory).map(entry => JarJar.JarEntryInput(jarFile, entry))
         def compiledClasses = repljlineClasses.iterator.map { case (base, file) => JarJar.FileInput(base, file) }
@@ -510,8 +510,10 @@ lazy val scalap = configureAsSubproject(project)
   )
   .dependsOn(compiler)
 
-lazy val partestExtras = configureAsSubproject(Project("partest-extras", file(".") / "src" / "partest-extras"))
+lazy val partestExtras = Project("partest-extras", file(".") / "src" / "partest-extras")
   .dependsOn(replJlineEmbedded)
+  .settings(commonSettings: _*)
+  .settings(generatePropertiesFileSettings: _*)
   .settings(clearSourceAndResourceDirectories: _*)
   .settings(disableDocs: _*)
   .settings(disablePublishing: _*)
@@ -597,8 +599,6 @@ lazy val partestJavaAgent = Project("partest-javaagent", file(".") / "src" / "pa
     // Setting name to "scala-partest-javaagent" so that the jar file gets that name, which the Runner relies on
     name := "scala-partest-javaagent",
     description := "Scala Compiler Testing Tool (compiler-specific java agent)",
-    // writing jar file to $buildDirectory/pack/lib because that's where it's expected to be found
-    setJarLocation,
     // add required manifest entry - previously included from file
     packageOptions in (Compile, packageBin) +=
       Package.ManifestAttributes( "Premain-Class" -> "scala.tools.partest.javaagent.ProfilingAgent" ),
@@ -795,25 +795,30 @@ lazy val root: Project = (project in file("."))
             k.scope.config.toOption.map(_.name + ":"),
             k.scope.task.toOption.map(_.label + "::")
           ).flatten.mkString + k.key
-        def logIncomplete(i: Incomplete, prefix: String): Unit = {
+        val loggedThis, loggedAny = new scala.collection.mutable.HashSet[String]
+        def findRootCauses(i: Incomplete, currentTask: String): Vector[(String, Option[Throwable])] = {
           val sk = i.node match {
             case Some(t: Task[_]) =>
               t.info.attributes.entries.collect { case e if e.key == Keys.taskDefinitionKey => e.value.asInstanceOf[Def.ScopedKey[_]] }
                 .headOption.map(showScopedKey)
             case _ => None
           }
-          val childCount = (if(i.directCause.isDefined) 1 else 0) + i.causes.length
-          val skip = childCount <= 1 && sk.isEmpty
-          if(!skip) log.error(s"$prefix- ${sk.getOrElse("?")}")
-          i.directCause match {
-            case Some(e) => log.error(s"$prefix  - $e")
-            case None => i.causes.foreach(i => logIncomplete(i, prefix + (if(skip) "" else "  ")))
+          val task = sk.getOrElse(currentTask)
+          val dup = sk.map(s => !loggedAny.add(s)).getOrElse(false)
+          if(sk.map(s => !loggedThis.add(s)).getOrElse(false)) Vector.empty
+          else i.directCause match {
+            case Some(e) => Vector((task, if(dup) None else Some(e)))
+            case None => i.causes.toVector.flatMap(ch => findRootCauses(ch, task))
           }
         }
         log.error(s"${failed.size} of ${results.length} test tasks failed:")
         failed.foreach { case (i, d) =>
           log.error(s"- $d")
-          logIncomplete(i, "  ")
+          loggedThis.clear
+          findRootCauses(i, "<unkown task>").foreach {
+            case (task, Some(ex)) => log.error(s"  - $task failed: $ex")
+            case (task, None)     => log.error(s"  - ($task failed)")
+          }
         }
         throw new RuntimeException
       }
@@ -829,7 +834,7 @@ lazy val root: Project = (project in file("."))
   )
 
 // The following subprojects' binaries are required for building "pack":
-lazy val distDependencies = Seq(replJline, replJlineEmbedded, compiler, library, partestExtras, partestJavaAgent, reflect, scalap, scaladoc)
+lazy val distDependencies = Seq(replJline, replJlineEmbedded, compiler, library, reflect, scalap, scaladoc)
 
 lazy val dist = (project in file("dist"))
   .settings(commonSettings)
@@ -854,7 +859,7 @@ lazy val dist = (project in file("dist"))
       val extraJars = (externalDependencyClasspath in Compile).value.map(a => (a.get(moduleID.key), a.data)).collect {
         case (Some(m), f) if extraModules contains uniqueModule(m) => f
       }
-      val jlineJAR = (dependencyClasspath in Compile).value.find(_.get(moduleID.key) == Some(jlineDep)).get.data
+      val jlineJAR = findJar((dependencyClasspath in Compile).value, jlineDep).get.data
       val mappings = extraJars.map(f => (f, targetDir / f.getName)) :+ ((jlineJAR, targetDir / "jline.jar"))
       IO.copy(mappings, overwrite = true)
       targetDir
@@ -1125,4 +1130,10 @@ intellijToSample := {
     IO.copy(copies)
   } else
     s.log.info("Aborting.")
+}
+
+/** Find a specific module's JAR in a classpath, comparing only organization and name */
+def findJar(files: Seq[Attributed[File]], dep: ModuleID): Option[Attributed[File]] = {
+  def extract(m: ModuleID) = (m.organization, m.name)
+  files.find(_.get(moduleID.key).map(extract _) == Some(extract(dep)))
 }
