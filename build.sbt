@@ -109,6 +109,11 @@ lazy val commonSettings = clearSourceAndResourceDirectories ++ publishSettings +
     }
   },
   scalaVersion := (scalaVersion in bootstrap).value,
+  // As of sbt 0.13.12 (sbt/sbt#2634) sbt endeavours to align both scalaOrganization and scalaVersion
+  // in the Scala artefacts, for example scala-library and scala-compiler.
+  // This doesn't work in the scala/scala build because the version of scala-library and the scalaVersion of
+  // scala-library are correct to be different. So disable overriding.
+  ivyScala ~= (_ map (_ copy (overrideScalaVersion = false))),
   // we always assume that Java classes are standalone and do not have any dependency
   // on Scala classes
   compileOrder := CompileOrder.JavaThenScala,
@@ -190,7 +195,7 @@ lazy val commonSettings = clearSourceAndResourceDirectories ++ publishSettings +
   // directly to stdout
   outputStrategy in run := Some(StdoutOutput),
   Quiet.silenceScalaBinaryVersionWarning
-)
+) ++ removePomDependencies
 
 /** Extra post-processing for the published POM files. These are needed to create POMs that
   * are equivalent to the ones from the Ant build. In the long term this should be removed and
@@ -219,10 +224,16 @@ def fixPom(extra: (String, scala.xml.Node)*): Setting[_] = {
   ) ++ extra) }
 }
 
+val pomDependencyExclusions =
+  settingKey[Seq[(String, String)]]("List of (groupId, artifactId) pairs to exclude from the POM and ivy.xml")
+
+pomDependencyExclusions in Global := Nil
+
 /** Remove unwanted dependencies from the POM and ivy.xml. */
-def removePomDependencies(deps: (String, String)*): Seq[Setting[_]] = Seq(
+lazy val removePomDependencies: Seq[Setting[_]] = Seq(
   pomPostProcess := { n =>
     val n2 = pomPostProcess.value.apply(n)
+    val deps = pomDependencyExclusions.value
     import scala.xml._
     import scala.xml.transform._
     new RuleTransformer(new RewriteRule {
@@ -240,6 +251,7 @@ def removePomDependencies(deps: (String, String)*): Seq[Setting[_]] = Seq(
     import scala.xml._
     import scala.xml.transform._
     val f = deliverLocal.value
+    val deps = pomDependencyExclusions.value
     val e = new RuleTransformer(new RewriteRule {
       override def transform(node: Node) = node match {
         case e: Elem if e.label == "dependency" && {
@@ -332,7 +344,9 @@ lazy val library = configureAsSubproject(project)
       "/project/name" -> <name>Scala Library</name>,
       "/project/description" -> <description>Standard library for the Scala Programming Language</description>,
       "/project/packaging" -> <packaging>jar</packaging>
-    )
+    ),
+    // Remove the dependency on "forkjoin" from the POM because it is included in the JAR:
+    pomDependencyExclusions += ((organization.value, "forkjoin"))
   )
   .settings(filterDocSources("*.scala" -- (regexFileFilter(".*/runtime/.*\\$\\.scala") ||
                                            regexFileFilter(".*/runtime/ScalaRunTime\\.scala") ||
@@ -364,6 +378,7 @@ lazy val reflect = configureAsSubproject(project)
 
 lazy val compiler = configureAsSubproject(project)
   .settings(generatePropertiesFileSettings: _*)
+  .settings(generateBuildCharacterFileSettings: _*)
   .settings(Osgi.settings: _*)
   .settings(
     name := "scala-compiler",
@@ -371,6 +386,8 @@ lazy val compiler = configureAsSubproject(project)
     libraryDependencies ++= Seq(antDep, asmDep),
     // These are only needed for the POM:
     libraryDependencies ++= Seq(scalaXmlDep, jlineDep % "optional"),
+    buildCharacterPropertiesFile := (resourceManaged in Compile).value / "scala-buildcharacter.properties",
+    resourceGenerators in Compile += generateBuildCharacterPropertiesFile.map(file => Seq(file)).taskValue,
     // this a way to make sure that classes from interactive and scaladoc projects
     // end up in compiler jar. note that we need to use LocalProject references
     // (with strings) to deal with mutual recursion
@@ -413,12 +430,9 @@ lazy val compiler = configureAsSubproject(project)
       "/project/description" -> <description>Compiler for the Scala Programming Language</description>,
       "/project/packaging" -> <packaging>jar</packaging>
     ),
-    apiURL := None
+    apiURL := None,
+    pomDependencyExclusions ++= List(("org.apache.ant", "ant"), ("org.scala-lang.modules", "scala-asm"))
   )
-  .settings(removePomDependencies(
-    ("org.apache.ant", "ant"),
-    ("org.scala-lang.modules", "scala-asm")
-  ): _*)
   .dependsOn(library, reflect)
 
 lazy val interactive = configureAsSubproject(project)
@@ -632,7 +646,7 @@ lazy val test = project
     javaOptions in IntegrationTest += "-Xmx2G",
     testFrameworks += new TestFramework("scala.tools.partest.sbt.Framework"),
     testFrameworks -= new TestFramework("org.scalacheck.ScalaCheckFramework"),
-    testOptions in IntegrationTest += Tests.Argument("-Dpartest.java_opts=-Xmx1024M -Xms64M -XX:MaxPermSize=128M"),
+    testOptions in IntegrationTest += Tests.Argument("-Dpartest.java_opts=-Xmx1024M -Xms64M"),
     testOptions in IntegrationTest += Tests.Argument("-Dpartest.scalac_opts=" + (scalacOptions in Compile).value.mkString(" ")),
     testOptions in IntegrationTest += Tests.Setup { () =>
       val cp = (dependencyClasspath in Test).value
@@ -740,6 +754,18 @@ lazy val root: Project = (project in file("."))
     publish := {},
     publishLocal := {},
     commands ++= ScriptCommands.all,
+    extractBuildCharacterPropertiesFile := {
+      val jar = (scalaInstance in bootstrap).value.compilerJar
+      val bc = buildCharacterPropertiesFile.value
+      val packagedName = "scala-buildcharacter.properties"
+      IO.withTemporaryDirectory { tmp =>
+        val extracted = IO.unzip(jar, tmp, new SimpleFilter(_ == packagedName)).headOption.getOrElse {
+          throw new RuntimeException(s"No file $packagedName found in bootstrap compiler $jar")
+        }
+        IO.copyFile(extracted, bc)
+        bc
+      }
+    },
     // Generate (Product|TupleN|Function|AbstractFunction)*.scala files and scaladoc stubs for all AnyVal sources.
     // They should really go into a managedSources dir instead of overwriting sources checked into git but scaladoc
     // source links (could be fixed by shipping these sources with the scaladoc bundles) and scala-js source maps

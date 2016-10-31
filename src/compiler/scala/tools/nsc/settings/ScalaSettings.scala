@@ -38,11 +38,8 @@ trait ScalaSettings extends AbsScalaSettings
   /** If any of these settings is enabled, the compiler should print a message and exit.  */
   def infoSettings = List[Setting](version, help, Xhelp, Yhelp, showPlugins, showPhases, genPhaseGraph)
 
-  /** Any -option:help? */
-  private def multihelp = allSettings exists { case s => s.isHelping case _ => false }
-
-  /** Is an info setting set? */
-  def isInfo = (infoSettings exists (_.isSetByUser)) || multihelp
+  /** Is an info setting set? Any -option:help? */
+  def isInfo = infoSettings.exists(_.isSetByUser) || allSettings.exists(_.isHelping)
 
   /** Disable a setting */
   def disable(s: Setting) = allSettings -= s
@@ -139,7 +136,7 @@ trait ScalaSettings extends AbsScalaSettings
     helpArg = "mode",
     descr   = "Generate forwarder methods in classes inhering concrete methods from traits.",
     choices = List("true", "junit", "false"),
-    default = "junit",
+    default = "true",
     choicesHelp = List(
       "Always generate mixin forwarders.",
       "Generate mixin forwarders for JUnit-annotated methods (JUnit 4 does not support default methods).",
@@ -147,7 +144,7 @@ trait ScalaSettings extends AbsScalaSettings
 
   object mixinForwarderChoices {
     def isTruthy = XmixinForceForwarders.value == "true"
-    def isJunit = isTruthy || XmixinForceForwarders.value == "junit"
+    def isAtLeastJunit = isTruthy || XmixinForceForwarders.value == "junit"
   }
 
   // XML parsing options
