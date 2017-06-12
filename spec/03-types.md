@@ -387,7 +387,7 @@ Function types are shorthands for class types that define `apply`
 functions.  Specifically, the $n$-ary function type
 $(T_1 , \ldots , T_n) \Rightarrow U$ is a shorthand for the class type
 `Function$_n$[T1 , … , $T_n$, U]`. Such class
-types are defined in the Scala library for $n$ between 0 and 9 as follows.
+types are defined in the Scala library for $n$ between 0 and 22 as follows.
 
 ```scala
 package scala
@@ -507,7 +507,7 @@ Assume the class definitions
 
 ```scala
 class Ref[T]
-abstract class Outer { type T } .
+abstract class Outer { type T }
 ```
 
 Here are some examples of existential types:
@@ -530,7 +530,7 @@ Ref[_ <: java.lang.Number]
 The type `List[List[_]]` is equivalent to the existential type
 
 ```scala
-List[List[t] forSome { type t }] .
+List[List[t] forSome { type t }]
 ```
 
 ###### Example
@@ -587,7 +587,7 @@ corresponding function type.
 
 The declarations
 
-```
+```scala
 def a: Int
 def b (x: Int): Boolean
 def c (x: Int) (y: String, z: String): String
@@ -642,7 +642,7 @@ the corresponding type parameter clause.
 
 Consider this fragment of the `Iterable[+X]` class:
 
-```
+```scala
 trait Iterable[+X] {
   def flatMap[newType[+X] <: Iterable[X], S](f: X => newType[S]): newType[S]
 }
@@ -660,7 +660,7 @@ same name, we model
 An overloaded type consisting of type alternatives $T_1 \commadots T_n (n \geq 2)$ is denoted internally $T_1 \overload \ldots \overload T_n$.
 
 ###### Example
-```
+```scala
 def println: Unit
 def println(s: String): Unit = $\ldots$
 def println(x: Float): Unit = $\ldots$
@@ -678,7 +678,7 @@ println:  => Unit $\overload$
 ```
 
 ###### Example
-```
+```scala
 def f(x: T): T = $\ldots$
 val f = 0
 ```
@@ -979,7 +979,7 @@ after applying [eta-expansion](06-expressions.html#eta-expansion). If $T$ is a m
 
 Given the definitions
 
-```
+```scala
 def foo(x: Int => String): Unit
 def foo(x: ToString): Unit
 

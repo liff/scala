@@ -194,7 +194,7 @@ trait Printers extends api.Printers { self: SymbolTable =>
     }
 
     def printAnnotations(tree: MemberDef) = {
-      // SI-5885: by default this won't print annotations of not yet initialized symbols
+      // scala/bug#5885: by default this won't print annotations of not yet initialized symbols
       val annots = tree.symbol.annotations match {
         case Nil  => tree.mods.annotations
         case anns => anns
@@ -775,7 +775,7 @@ trait Printers extends api.Printers { self: SymbolTable =>
             }
             // constructor's params processing (don't print single empty constructor param list)
             vparamss match {
-              case Nil | List(Nil) if (!mods.isCase && !ctorMods.hasFlag(AccessFlags)) =>
+              case Nil | List(Nil) if !mods.isCase && !ctorMods.hasFlag(AccessFlags) =>
               case _ => vparamss foreach printConstrParams
             }
             parents

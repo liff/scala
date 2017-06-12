@@ -44,7 +44,7 @@ class JavaUniverse extends InternalSymbolTable with JavaUniverseForce with Refle
 
   override lazy val internal: Internal = new SymbolTableInternal {
     override def typeTagToManifest[T: ClassTag](mirror0: Any, tag: Universe # TypeTag[T]): Manifest[T] = {
-      // SI-6239: make this conversion more precise
+      // scala/bug#6239: make this conversion more precise
       val mirror = mirror0.asInstanceOf[Mirror]
       val runtimeClass = mirror.runtimeClass(tag.in(mirror).tpe)
       Manifest.classType(runtimeClass).asInstanceOf[Manifest[T]]
@@ -91,7 +91,7 @@ class JavaUniverse extends InternalSymbolTable with JavaUniverseForce with Refle
   // Main challenges that runtime reflection presents wrt initialization are:
   //   1) Extravagant completion scheme that enters package members on-demand rather than a result of scanning a directory with class files.
   //      (That's a direct consequence of the fact that in general case we can't enumerate all classes in a classloader.
-  //      As Paul rightfully mentioned, we could specialcase classloaders that point to filesystems, but that is left for future work).
+  //      As Paul rightfully mentioned, we could special case classloaders that point to filesystems, but that is left for future work).
   //   2) Presence of synthetic symbols that aren't loaded by normal means (from classfiles) but are synthesized on-the-fly,
   //      and the necessity to propagate these synthetic symbols from rootMirror to other mirrors,
   //      complicated by the fact that such symbols depend on normal symbols (e.g. AnyRef depends on Object).

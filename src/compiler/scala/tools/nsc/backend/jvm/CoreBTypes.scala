@@ -22,7 +22,7 @@ import scala.tools.nsc.backend.jvm.BTypes.InternalName
  * constructor will actually go through the proxy. The lazy vals make sure the instance is assigned
  * in the proxy before the fields are initialized.
  *
- * Note: if we did not re-create the core BTypes on each compiler run, BType.classBTypeFromInternalNameMap
+ * Note: if we did not re-create the core BTypes on each compiler run, BType.classBTypeCacheFromSymbol
  * could not be a perRunCache anymore: the classes defined here need to be in that map, they are
  * added when the ClassBTypes are created. The per run cache removes them, so they would be missing
  * in the second run.
@@ -103,6 +103,7 @@ class CoreBTypes[BTFS <: BTypesFromSymbols[_ <: Global]](val bTypes: BTFS) {
   lazy val jlCloneableRef            : ClassBType = classBTypeFromSymbol(JavaCloneableClass)        // java/lang/Cloneable
   lazy val jiSerializableRef         : ClassBType = classBTypeFromSymbol(JavaSerializableClass)     // java/io/Serializable
   lazy val jlClassCastExceptionRef   : ClassBType = classBTypeFromSymbol(ClassCastExceptionClass)   // java/lang/ClassCastException
+  lazy val jlIllegalArgExceptionRef  : ClassBType = classBTypeFromSymbol(IllegalArgExceptionClass)  // java/lang/IllegalArgumentException
   lazy val juMapRef                  : ClassBType = classBTypeFromSymbol(JavaUtilMap)               // java/util/Map
   lazy val juHashMapRef              : ClassBType = classBTypeFromSymbol(JavaUtilHashMap)           // java/util/HashMap
   lazy val sbScalaBeanInfoRef        : ClassBType = classBTypeFromSymbol(requiredClass[scala.beans.ScalaBeanInfo])
@@ -314,6 +315,7 @@ trait CoreBTypesProxyGlobalIndependent[BTS <: BTypes] {
   def PredefRef                 : ClassBType
   def jlCloneableRef            : ClassBType
   def jiSerializableRef         : ClassBType
+  def jlIllegalArgExceptionRef  : ClassBType
   def juHashMapRef              : ClassBType
   def juMapRef                  : ClassBType
   def jliCallSiteRef            : ClassBType
@@ -379,6 +381,7 @@ final class CoreBTypesProxy[BTFS <: BTypesFromSymbols[_ <: Global]](val bTypes: 
   def jlCloneableRef            : ClassBType = _coreBTypes.jlCloneableRef
   def jiSerializableRef         : ClassBType = _coreBTypes.jiSerializableRef
   def jlClassCastExceptionRef   : ClassBType = _coreBTypes.jlClassCastExceptionRef
+  def jlIllegalArgExceptionRef  : ClassBType = _coreBTypes.jlIllegalArgExceptionRef
   def juMapRef                  : ClassBType = _coreBTypes.juMapRef
   def juHashMapRef              : ClassBType = _coreBTypes.juHashMapRef
   def sbScalaBeanInfoRef        : ClassBType = _coreBTypes.sbScalaBeanInfoRef

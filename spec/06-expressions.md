@@ -222,9 +222,14 @@ the linearization of class `D` is `{D, B, A, Root}`.
 Then we have:
 
 ```scala
-(new A).superA == "Root",
-                          (new C).superB = "Root", (new C).superC = "B",
-(new D).superA == "Root", (new D).superB = "A",    (new D).superD = "B",
+(new A).superA == "Root"
+
+(new C).superB == "Root"
+(new C).superC == "B"
+
+(new D).superA == "Root"
+(new D).superB == "A"
+(new D).superD == "B"
 ```
 
 Note that the `superB` function returns different results
@@ -320,7 +325,7 @@ would not typecheck.
 
 ### Named and Default Arguments
 
-If an application might uses named arguments $p = e$ or default
+If an application is to use named arguments $p = e$ or default
 arguments, the following conditions must hold.
 
 - For every named argument $p_i = e_i$ which appears left of a positional argument
@@ -330,7 +335,7 @@ arguments, the following conditions must hold.
   argument defines a parameter which is already specified by a
   positional argument.
 - Every formal parameter $p_j:T_j$ which is not specified by either a positional
-  or a named argument has a default argument.
+  or named argument has a default argument.
 
 If the application uses named or default
 arguments the following transformation is applied to convert it into
@@ -455,7 +460,7 @@ $e$.
 
 Type applications can be omitted if
 [local type inference](#local-type-inference) can infer best type parameters
-for a polymorphic functions from the types of the actual function arguments
+for a polymorphic function from the types of the actual function arguments
 and the expected result type.
 
 ## Tuples
@@ -655,7 +660,7 @@ precedence, with characters on the same line having the same precedence.
 ```
 
 That is, operators starting with a letter have lowest precedence,
-followed by operators starting with ``|`', etc.
+followed by operators starting with ‘`|`’, etc.
 
 There's one exception to this rule, which concerns
 [_assignment operators_](#assignment-operators).
@@ -664,7 +669,7 @@ of simple assignment `(=)`. That is, it is lower than the
 precedence of any other operator.
 
 The _associativity_ of an operator is determined by the operator's
-last character.  Operators ending in a colon ``:`' are
+last character.  Operators ending in a colon ‘`:`’ are
 right-associative. All other operators are left-associative.
 
 Precedence and associativity of operators determine the grouping of
@@ -945,7 +950,7 @@ comprehensions have been eliminated.
     `$e$.foreach { case $p$ => $e'$ }`.
   - A for comprehension
 
-    ```
+    ```scala
     for ($p$ <- $e$; $p'$ <- $e'; \ldots$) yield $e''$
     ```
 
@@ -953,13 +958,13 @@ comprehensions have been eliminated.
     sequence of generators, definitions, or guards,
     is translated to
 
-    ```
+    ```scala
     $e$.flatMap { case $p$ => for ($p'$ <- $e'; \ldots$) yield $e''$ }
     ```
 
   - A for loop
 
-    ```
+    ```scala
     for ($p$ <- $e$; $p'$ <- $e'; \ldots$) $e''$
     ```
 
@@ -967,7 +972,7 @@ comprehensions have been eliminated.
     sequence of generators, definitions, or guards,
     is translated to
 
-    ```
+    ```scala
     $e$.foreach { case $p$ => for ($p'$ <- $e'; \ldots$) $e''$ }
     ```
 
@@ -980,7 +985,7 @@ comprehensions have been eliminated.
     `$p'$ = $e'$` is translated to the following generator of pairs of values, where
     $x$ and $x'$ are fresh names:
 
-    ```
+    ```scala
     ($p$, $p'$) <- for ($x @ p$ <- $e$) yield { val $x' @ p'$ = $e'$; ($x$, $x'$) }
     ```
 

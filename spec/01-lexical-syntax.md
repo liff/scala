@@ -23,7 +23,7 @@ hexDigit      ::= ‘0’ | … | ‘9’ | ‘A’ | … | ‘F’ | ‘a’ | 
 ```
 
 <!--
-TODO SI-4583: UnicodeEscape used to allow additional backslashes,
+TODO scala/bug#4583: UnicodeEscape used to allow additional backslashes,
 and there is something in the code `evenSlashPrefix` that alludes to it,
 but I can't make it work nor can I imagine how this would make sense,
 so I removed it for now.
@@ -55,7 +55,7 @@ plainid  ::=  upper idrest
            |  varid
            |  op
 id       ::=  plainid
-           |  ‘`’ stringLiteral ‘`’
+           |  ‘`’ { charNoBackQuoteOrNewline | UnicodeEscape | charEscapeSeq } ‘`’
 idrest   ::=  {letter | digit} [‘_’ op]
 ```
 

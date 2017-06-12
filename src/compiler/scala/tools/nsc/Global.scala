@@ -86,6 +86,19 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
 
   def erasurePhase: Phase = if (currentRun.isDefined) currentRun.erasurePhase else NoPhase
 
+  /* Override `newStubSymbol` defined in `SymbolTable` to provide us access
+   * to the last tree to typer, whose position is the trigger of stub errors. */
+  override def newStubSymbol(owner: Symbol,
+                             name: Name,
+                             missingMessage: String): Symbol = {
+    val stubSymbol = super.newStubSymbol(owner, name, missingMessage)
+    val stubErrorPosition = {
+      val lastTreeToTyper = analyzer.lastTreeToTyper
+      if (lastTreeToTyper != EmptyTree) lastTreeToTyper.pos else stubSymbol.pos
+    }
+    stubSymbol.setPos(stubErrorPosition)
+  }
+
   // platform specific elements
 
   protected class GlobalPlatform extends {
@@ -95,6 +108,9 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
 
   type ThisPlatform = JavaPlatform { val global: Global.this.type }
   lazy val platform: ThisPlatform  = new GlobalPlatform
+  /* A hook for the REPL to add a classpath entry containing products of previous runs to inliner's bytecode repository*/
+  // Fixes scala/bug#8779
+  def optimizerClassPath(base: ClassPath): ClassPath = base
 
   def classPath: ClassPath = platform.classPath
 
@@ -181,6 +197,19 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
       nodePrinters.infolevel = saved
     }
   }
+
+  private var propCnt = 0
+  @inline final def withPropagateCyclicReferences[T](t: => T): T = {
+    try {
+      propCnt = propCnt+1
+      t
+    } finally {
+      propCnt = propCnt-1
+      assert(propCnt >= 0)
+    }
+  }
+
+  def propagateCyclicReferences: Boolean = propCnt > 0
 
   /** Representing ASTs as graphs */
   object treeBrowsers extends {
@@ -324,14 +353,6 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
       s"[search path for source files: ${classPath.asSourcePathString}]\n" +
       s"[search path for class files: ${classPath.asClassPathString}]"
     )
-
-  // The current division between scala.reflect.* and scala.tools.nsc.* is pretty
-  // clunky.  It is often difficult to have a setting influence something without having
-  // to create it on that side.  For this one my strategy is a constant def at the file
-  // where I need it, and then an override in Global with the setting.
-  override protected val etaExpandKeepsStar = settings.etaExpandKeepsStar.value
-  // Here comes another one...
-  override protected val enableTypeVarExperimentals = settings.Xexperimental.value
 
   def getSourceFile(f: AbstractFile): BatchSourceFile = new BatchSourceFile(f, reader read f)
 
@@ -945,10 +966,11 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
        definitions.isDefinitionsInitialized
     && rootMirror.isMirrorInitialized
   )
-  override def isPastTyper = (
+  override def isPastTyper = isPast(currentRun.typerPhase)
+  def isPast(phase: Phase) = (
        (curRun ne null)
     && isGlobalInitialized // defense against init order issues
-    && (globalPhase.id > currentRun.typerPhase.id)
+    && (globalPhase.id > phase.id)
   )
 
   // TODO - trim these to the absolute minimum.
@@ -981,7 +1003,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
   )
 
   private def formatExplain(pairs: (String, Any)*): String = (
-    pairs.toList collect { case (k, v) if v != null => "%20s: %s".format(k, v) } mkString "\n"
+    pairs collect { case (k, v) if v != null => f"$k%20s: $v" } mkString "\n"
   )
 
   /** Don't want to introduce new errors trying to report errors,
@@ -994,9 +1016,10 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     val site      = lastSeenContext.enclClassOrMethod.owner
     val pos_s     = if (tree.pos.isDefined) s"line ${tree.pos.line} of ${tree.pos.source.file}" else "<unknown>"
     val context_s = try {
+      import scala.reflect.io.{File => SFile}
       // Taking 3 before, 3 after the fingered line.
-      val start = 0 max (tree.pos.line - 3)
-      val xs = scala.reflect.io.File(tree.pos.source.file.file).lines drop start take 7
+      val start = 1 max (tree.pos.line - 3)
+      val xs = SFile(tree.pos.source.file.file).lines.drop(start-1).take(7)
       val strs = xs.zipWithIndex map { case (line, idx) => f"${start + idx}%6d $line" }
       strs.mkString("== Source file context for tree position ==\n\n", "\n", "")
     }
@@ -1189,7 +1212,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
       first
     }
 
-    // --------------- Miscellania -------------------------------
+    // --------------- Miscellanea -------------------------------
 
     /** Progress tracking.  Measured in "progress units" which are 1 per
      *  compilation unit per phase completed.
@@ -1297,7 +1320,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
 
     /** does this run compile given class, module, or case factory? */
     // NOTE: Early initialized members temporarily typechecked before the enclosing class, see typedPrimaryConstrBody!
-    //       Here we work around that wrinkle by claiming that a early-initialized member is compiled in
+    //       Here we work around that wrinkle by claiming that a pre-initialized member is compiled in
     //       *every* run. This approximation works because this method is exclusively called with `this` == `currentRun`.
     def compiles(sym: Symbol): Boolean =
       if (sym == NoSymbol) false

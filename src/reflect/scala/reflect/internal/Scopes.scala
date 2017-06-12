@@ -256,7 +256,7 @@ trait Scopes extends api.Scopes { self: SymbolTable =>
         // clues from the symbols on that one, as implemented here. In general
         // the distinct list is one type and lub becomes the identity.
         // val prefix = lub(alts map (_.info.prefix) distinct)
-        // Now using NoSymbol and NoPrefix always to avoid forcing info (SI-6664)
+        // Now using NoSymbol and NoPrefix always to avoid forcing info (scala/bug#6664)
         NoSymbol.newOverloaded(NoPrefix, alts)
       }
     }
@@ -280,6 +280,15 @@ trait Scopes extends api.Scopes { self: SymbolTable =>
         case null => Iterator.empty
         case e    => lookupAllEntries(name) filter (e1 => (e eq e1) || (e.depth == e1.depth && e.sym != e1.sym))
       }
+    }
+
+    final def lookupSymbolEntry(sym: Symbol): ScopeEntry = {
+      var e = lookupEntry(sym.name)
+      while (e ne null) {
+        if (e.sym == sym) return e
+        e = lookupNextEntry(e)
+      }
+      null
     }
 
     /** lookup a symbol entry matching given name.
@@ -316,6 +325,20 @@ trait Scopes extends api.Scopes { self: SymbolTable =>
         do { e = e.next } while ((e ne null) && e.sym.name != entry.sym.name)
       e
     }
+
+    final def lookupNameInSameScopeAs(original: Symbol, companionName: Name): Symbol = {
+      lookupSymbolEntry(original) match {
+        case null =>
+        case entry =>
+          var e = lookupEntry(companionName)
+          while (e != null) {
+            if (e.owner eq entry.owner) return e.sym
+            e = lookupNextEntry(e)
+          }
+      }
+      NoSymbol
+    }
+
 
     /** TODO - we can test this more efficiently than checking isSubScope
      *  in both directions. However the size test might be enough to quickly
@@ -380,7 +403,7 @@ trait Scopes extends api.Scopes { self: SymbolTable =>
       if (toList forall p) this
       else newScopeWith(toList filter p: _*)
     )
-    @deprecated("use `toList.reverse` instead", "2.10.0") // Used in SBT 0.12.4
+    @deprecated("use `toList.reverse` instead", "2.10.0") // Used in sbt 0.12.4
     def reverse: List[Symbol] = toList.reverse
 
     override def mkString(start: String, sep: String, end: String) =

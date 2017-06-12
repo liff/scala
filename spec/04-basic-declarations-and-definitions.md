@@ -88,10 +88,10 @@ The class definition `case class X(), Y(n: Int) extends Z` expands to
 `case class X extends Z; case class Y(n: Int) extends Z`.
 - The object definition `case object Red, Green, Blue extends Color`~
 expands to
-```
+```scala
 case object Red extends Color
 case object Green extends Color
-case object Blue extends Color .
+case object Blue extends Color
 ```
 -->
 
@@ -144,7 +144,7 @@ value definition `val $p$ = $e$` is expanded as follows:
 val $\$ x$ = $e$ match {case $p$ => ($x_1 , \ldots , x_n$)}
 val $x_1$ = $\$ x$._1
 $\ldots$
-val $x_n$ = $\$ x$._n  .
+val $x_n$ = $\$ x$._n
 ```
 
 Here, $\$ x$ is a fresh name.
@@ -404,7 +404,7 @@ function definitions.  In this section we consider only type parameter
 definitions with lower bounds `>: $L$` and upper bounds
 `<: $U$` whereas a discussion of context bounds
 `: $U$` and view bounds `<% $U$`
-is deferred to [here](07-implicit-parameters-and-views.html#context-bounds-and-view-bounds).
+is deferred to [here](07-implicits.html#context-bounds-and-view-bounds).
 
 The most general form of a first-order type parameter is
 `$@a_1 \ldots @a_n$ $\pm$ $t$ >: $L$ <: $U$`.
@@ -587,7 +587,7 @@ FunDef             ::=  FunSig [‘:’ Type] ‘=’ Expr
 FunSig             ::=  id [FunTypeParamClause] ParamClauses
 FunTypeParamClause ::=  ‘[’ TypeParam {‘,’ TypeParam} ‘]’
 ParamClauses       ::=  {ParamClause} [[nl] ‘(’ ‘implicit’ Params ‘)’]
-ParamClause        ::=  [nl] ‘(’ [Params] ‘)’}
+ParamClause        ::=  [nl] ‘(’ [Params] ‘)’
 Params             ::=  Param {‘,’ Param}
 Param              ::=  {Annotation} id [‘:’ ParamType] [‘=’ Expr]
 ParamType          ::=  Type
@@ -669,6 +669,15 @@ def f(a: Int = 0)(b: Int = a + 1) = b // OK
 f(10)()                               // returns 11 (not 1)
 ```
 
+If an [implicit argument](07-implicits.html#implicit-parameters)
+is not found by implicit search, it may be supplied using a default argument.
+
+```scala
+implicit val i: Int = 2
+def f(implicit x: Int, s: String = "hi") = s * x
+f                                     // "hihi"
+```
+
 ### By-Name Parameters
 
 ```ebnf
@@ -686,7 +695,7 @@ The by-name modifier is disallowed for parameters of classes that
 carry a `val` or `var` prefix, including parameters of case
 classes for which a `val` prefix is implicitly generated. The
 by-name modifier is also disallowed for
-[implicit parameters](07-implicit-parameters-and-views.html#implicit-parameters).
+[implicit parameters](07-implicits.html#implicit-parameters).
 
 ###### Example
 The declaration

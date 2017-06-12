@@ -180,7 +180,7 @@ object scalac extends Command {
           Mono(Bold("@") & Argument("file")),
           "A text file containing compiler arguments (options and source files)")
 
-        // TODO - Add macros an dsuch here.
+        // TODO - Add macros and such here.
       )
     ),
 
@@ -304,7 +304,7 @@ object scalac extends Command {
           "Print a synopsis of compiler phases."),
         Definition(
           CmdOptionBound("Xsource:", Argument("version")),
-          "Treat compiler input as Scala source for the specified version, see SI-8126."),
+          "Treat compiler input as Scala source for the specified version, see scala/bug#8126."),
         Definition(
           CmdOption("Xsource-reader", Argument("classname")),
           "Specify a custom method for reading source files."),
@@ -474,7 +474,7 @@ object scalac extends Command {
 
   val exitStatus = Section("EXIT STATUS",
 
-    MBold(command) & " returns a zero exist status if it succeeds to " &
+    MBold(command) & " returns a zero exit status if it succeeds to " &
     "compile the specified input files. Non zero is returned in case " &
     "of failure.")
 

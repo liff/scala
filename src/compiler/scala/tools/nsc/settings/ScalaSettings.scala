@@ -36,7 +36,7 @@ trait ScalaSettings extends AbsScalaSettings
   protected def futureSettings = List[BooleanSetting]()
 
   /** If any of these settings is enabled, the compiler should print a message and exit.  */
-  def infoSettings = List[Setting](version, help, Xhelp, Yhelp, showPlugins, showPhases, genPhaseGraph)
+  def infoSettings = List[Setting](version, help, Xhelp, Yhelp, showPlugins, showPhases, genPhaseGraph, printArgs)
 
   /** Is an info setting set? Any -option:help? */
   def isInfo = infoSettings.exists(_.isSetByUser) || allSettings.exists(_.isHelping)
@@ -83,8 +83,12 @@ trait ScalaSettings extends AbsScalaSettings
    * The previous "-source" option is intended to be used mainly
    * though this helper.
    */
-  def isScala211: Boolean = source.value >= ScalaVersion("2.11.0")
-  def isScala212: Boolean = source.value >= ScalaVersion("2.12.0")
+  private[this] val version211 = ScalaVersion("2.11.0")
+  def isScala211: Boolean = source.value >= version211
+  private[this] val version212 = ScalaVersion("2.12.0")
+  def isScala212: Boolean = source.value >= version212
+  private[this] val version213 = ScalaVersion("2.13.0")
+  def isScala213: Boolean = source.value >= version213
 
   /**
    * -X "Advanced" settings
@@ -104,6 +108,8 @@ trait ScalaSettings extends AbsScalaSettings
   val logFreeTerms       = BooleanSetting      ("-Xlog-free-terms", "Print a message when reification creates a free term.")
   val logFreeTypes       = BooleanSetting      ("-Xlog-free-types", "Print a message when reification resorts to generating a free type.")
   val maxClassfileName   = IntSetting          ("-Xmax-classfile-name", "Maximum filename length for generated classes", 255, Some((72, 255)), _ => None)
+  val maxerrs            = IntSetting          ("-Xmaxerrs", "Maximum errors to print", 100, None, _ => None)
+  val maxwarns           = IntSetting          ("-Xmaxwarns", "Maximum warnings to print", 100, None, _ => None)
   val Xmigration         = ScalaVersionSetting ("-Xmigration", "version", "Warn about constructs whose behavior may have changed since version.", initial = NoScalaVersion, default = Some(AnyScalaVersion))
   val nouescape          = BooleanSetting      ("-Xno-uescape", "Disable handling of \\u unicode escapes.")
   val Xnojline           = BooleanSetting      ("-Xnojline", "Do not use JLine for editing.")
@@ -116,6 +122,7 @@ trait ScalaSettings extends AbsScalaSettings
   val Xprint             = PhasesSetting       ("-Xprint", "Print out program after")
   val Xprintpos          = BooleanSetting      ("-Xprint-pos", "Print tree positions, as offsets.")
   val printtypes         = BooleanSetting      ("-Xprint-types", "Print tree types (debugging option).")
+  val printArgs          = BooleanSetting      ("-Xprint-args", "Print all compiler arguments and exit.")
   val prompt             = BooleanSetting      ("-Xprompt", "Display a prompt after each error (debugging option).")
   val resident           = BooleanSetting      ("-Xresident", "Compiler stays resident: read source filenames from standard input.")
   val script             = StringSetting       ("-Xscript", "object", "Treat the source file as a script and wrap it in a main method.", "")
@@ -126,7 +133,7 @@ trait ScalaSettings extends AbsScalaSettings
   val sourceReader       = StringSetting       ("-Xsource-reader", "classname", "Specify a custom method for reading source files.", "")
   val reporter           = StringSetting       ("-Xreporter", "classname", "Specify a custom reporter for compiler messages.", "scala.tools.nsc.reporters.ConsoleReporter")
   val strictInference    = BooleanSetting      ("-Xstrict-inference", "Don't infer known-unsound types")
-  val source             = ScalaVersionSetting ("-Xsource", "version", "Treat compiler input as Scala source for the specified version, see SI-8126.", initial = ScalaVersion("2.12"))
+  val source             = ScalaVersionSetting ("-Xsource", "version", "Treat compiler input as Scala source for the specified version, see scala/bug#8126.", initial = ScalaVersion("2.12"))
 
   val XnoPatmatAnalysis = BooleanSetting ("-Xno-patmat-analysis", "Don't perform exhaustivity/unreachability analysis. Also, ignore @switch annotation.")
   val XfullLubs         = BooleanSetting ("-Xfull-lubs", "Retains pre 2.10 behavior of less aggressive truncation of least upper bounds.")
@@ -211,10 +218,9 @@ trait ScalaSettings extends AbsScalaSettings
   val Yreplclassbased = BooleanSetting    ("-Yrepl-class-based", "Use classes to wrap REPL snippets instead of objects")
   val Yreploutdir     = StringSetting     ("-Yrepl-outdir", "path", "Write repl-generated classfiles to given output directory (use \"\" to generate a temporary dir)" , "")
   val YmethodInfer    = BooleanSetting    ("-Yinfer-argument-types", "Infer types for arguments of overridden methods.")
-  val etaExpandKeepsStar = BooleanSetting ("-Yeta-expand-keeps-star", "Eta-expand varargs methods to T* rather than Seq[T].  This is a temporary option to ease transition.").withDeprecationMessage(removalIn212)
-  val inferByName     = BooleanSetting    ("-Yinfer-by-name", "Allow inference of by-name types. This is a temporary option to ease transition. See SI-7899.").withDeprecationMessage(removalIn212)
   val YdisableFlatCpCaching  = BooleanSetting    ("-YdisableFlatCpCaching", "Do not cache flat classpath representation of classpath elements from jars across compiler instances.")
   val YpartialUnification = BooleanSetting ("-Ypartial-unification", "Enable partial unification in type constructor inference")
+  val Yvirtpatmat     = BooleanSetting    ("-Yvirtpatmat", "Enable pattern matcher virtualization")
 
   val exposeEmptyPackage = BooleanSetting ("-Yexpose-empty-package", "Internal only: expose the empty package.").internalOnly()
   val Ydelambdafy        = ChoiceSetting  ("-Ydelambdafy", "strategy", "Strategy used for translating lambdas into JVM code.", List("inline", "method"), "method")
@@ -319,8 +325,6 @@ trait ScalaSettings extends AbsScalaSettings
   val YoptTrace = StringSetting("-Yopt-trace", "package/Class.method", "Trace the optimizer progress for methods; `_` to print all, prefix match to select.", "")
 
   val YoptLogInline = StringSetting("-Yopt-log-inline", "package/Class.method", "Print a summary of inliner activity; `_` to print all, prefix match to select.", "")
-
-  private def removalIn212 = "This flag is scheduled for removal in 2.12. If you have a case where you need this flag then please report a bug."
 
   object YstatisticsPhases extends MultiChoiceEnumeration { val parser, typer, patmat, erasure, cleanup, jvm = Value }
   val Ystatistics = {

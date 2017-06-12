@@ -57,6 +57,12 @@ trait StdAttachments {
    */
   case object BackquotedIdentifierAttachment extends PlainAttachment
 
+  /** Indicates that the host `Ident` has been created from a pattern2 binding, `case x @ p`.
+   *  In the absence of named parameters in patterns, allows nuanced warnings for unused variables.
+   *  Hence, `case X(x = _) =>` would not warn; for now, `case X(x @ _) =>` is documentary if x is unused.
+   */
+  case object AtBoundIdentifierAttachment extends PlainAttachment
+
   /** Identifies trees are either result or intermediate value of for loop desugaring.
    */
   case object ForAttachment extends PlainAttachment
@@ -78,4 +84,13 @@ trait StdAttachments {
   case object OuterArgCanBeElided extends PlainAttachment
 
   case object UseInvokeSpecial extends PlainAttachment
+
+  /** An attachment carrying information between uncurry and erasure */
+  case class TypeParamVarargsAttachment(val typeParamRef: Type)
+
+  /** Attached to a class symbol to indicate that its children have been observed
+    * via knownDirectSubclasses. Children added subsequently will trigger an
+    * error to indicate that the earlier observation was incomplete.
+    */
+  case object KnownDirectSubclassesCalled extends PlainAttachment
 }

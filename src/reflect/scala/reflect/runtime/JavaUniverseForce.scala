@@ -40,6 +40,7 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     this.SAMFunction
     this.DelambdafyTarget
     this.BackquotedIdentifierAttachment
+    this.AtBoundIdentifierAttachment
     this.ForAttachment
     this.SyntheticUnitAttachment
     this.SubpatternsAttachment
@@ -47,6 +48,8 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     this.InlineCallsiteAttachment
     this.OuterArgCanBeElided
     this.UseInvokeSpecial
+    this.TypeParamVarargsAttachment
+    this.KnownDirectSubclassesCalled
     this.noPrint
     this.typeDebug
     this.Range
@@ -231,6 +234,7 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.NullPointerExceptionClass
     definitions.ThrowableClass
     definitions.UninitializedErrorClass
+    definitions.IllegalArgExceptionClass
     definitions.UninitializedFieldConstructor
     definitions.PartialFunctionClass
     definitions.AbstractPartialFunctionClass
@@ -321,7 +325,8 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.QuasiquoteClass_api_unapply
     definitions.ScalaSignatureAnnotation
     definitions.ScalaLongSignatureAnnotation
-    definitions.MethodHandle
+    definitions.MethodHandleClass
+    definitions.VarHandleClass
     definitions.OptionClass
     definitions.OptionModule
     definitions.SomeClass
@@ -406,6 +411,7 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.UncheckedBoundsClass
     definitions.UnspecializedClass
     definitions.VolatileAttr
+    definitions.FunctionalInterfaceClass
     definitions.BeanGetterTargetClass
     definitions.BeanSetterTargetClass
     definitions.FieldTargetClass
@@ -426,6 +432,7 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.hijackedCoreClasses
     definitions.symbolsNotPresentInBytecode
     definitions.isPossibleSyntheticParent
+    definitions.ShowAsInfixAnnotationClass
     definitions.abbrvTag
     definitions.numericWeight
     definitions.boxedModule
@@ -458,6 +465,7 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.ScalaValueClassesNoUnit
     definitions.ScalaValueClasses
 
+    uncurry.VarargsSymbolAttachment
     uncurry.DesugaredParameterType
     erasure.GenericArray
     erasure.scalaErasure

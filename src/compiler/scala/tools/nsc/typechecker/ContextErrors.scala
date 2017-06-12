@@ -181,7 +181,7 @@ trait ContextErrors {
       }
 
       def AdaptTypeError(tree: Tree, found: Type, req: Type) = {
-        // SI-3971 unwrapping to the outermost Apply helps prevent confusion with the
+        // scala/bug#3971 unwrapping to the outermost Apply helps prevent confusion with the
         // error message point.
         def callee = {
           def unwrap(t: Tree): Tree = t match {
@@ -376,7 +376,7 @@ trait ContextErrors {
         }
         issueNormalTypeError(sel, errMsg)
         // the error has to be set for the copied tree, otherwise
-        // the error remains persistent acros multiple compilations
+        // the error remains persistent across multiple compilations
         // and causes problems
         //setError(sel)
       }
@@ -655,9 +655,6 @@ trait ContextErrors {
       def ParentFinalInheritanceError(parent: Tree, mixin: Symbol) =
         NormalTypeError(parent, "illegal inheritance from final "+mixin)
 
-      def ParentSealedInheritanceError(parent: Tree, psym: Symbol) =
-        NormalTypeError(parent, "illegal inheritance from sealed " + psym )
-
       def ParentSelfTypeConformanceError(parent: Tree, selfType: Type) =
         NormalTypeError(parent,
           "illegal inheritance;\n self-type "+selfType+" does not conform to "+
@@ -761,7 +758,7 @@ trait ContextErrors {
         val addPref = s";\n  the conflicting $sym1 was defined"
         val bugNote = "\n  Note: this may be due to a bug in the compiler involving wildcards in package objects"
 
-        // Most of this hard work is associated with SI-4893.
+        // Most of this hard work is associated with scala/bug#4893.
         val isBug = sym0.isAbstractType && sym1.isAbstractType && (sym0.name startsWith "_$")
         val addendum = (
           if (sym0.pos.source eq sym1.pos.source)   s"$addPref at line ${sym1.pos.line}:${sym1.pos.column}"
@@ -855,7 +852,7 @@ trait ContextErrors {
           } catch {
             // the code above tries various tricks to detect the relevant portion of the stack trace
             // if these tricks fail, just fall back to uninformative, but better than nothing, getMessage
-            case NonFatal(ex) => // currently giving a spurious warning, see SI-6994
+            case NonFatal(ex) => // currently giving a spurious warning, see scala/bug#6994
               macroLogVerbose("got an exception when processing a macro generated exception\n" +
                               "offender = " + stackTraceString(realex) + "\n" +
                               "error = " + stackTraceString(ex))
@@ -930,7 +927,7 @@ trait ContextErrors {
       }
 
       private def issueAmbiguousTypeErrorUnlessErroneous(pos: Position, pre: Type, sym1: Symbol, sym2: Symbol, rest: String): Unit = {
-        // To avoid stack overflows (SI-8890), we MUST (at least) report when either `validTargets` OR `ambiguousSuppressed`
+        // To avoid stack overflows (scala/bug#8890), we MUST (at least) report when either `validTargets` OR `ambiguousSuppressed`
         // More details:
         // If `!context.ambiguousErrors`, `reporter.issueAmbiguousError` (which `context.issueAmbiguousError` forwards to)
         // buffers ambiguous errors. In this case, to avoid looping, we must issue even if `!validTargets`. (TODO: why?)
@@ -1172,6 +1169,9 @@ trait ContextErrors {
       def MissingParameterOrValTypeError(vparam: Tree) =
         issueNormalTypeError(vparam, "missing parameter type")
 
+      def ParentSealedInheritanceError(parent: Tree, psym: Symbol) =
+        NormalTypeError(parent, "illegal inheritance from sealed " + psym )
+
       def RootImportError(tree: Tree) =
         issueNormalTypeError(tree, "_root_ cannot be imported")
 
@@ -1211,7 +1211,7 @@ trait ContextErrors {
             "pass-by-name arguments not allowed for case class parameters"
 
           case AbstractVar =>
-            "only classes can have declared but undefined members" + abstractVarMessage(sym)
+            "only traits and abstract classes can have declared but undefined members" + abstractVarMessage(sym)
 
         }
         issueSymbolTypeError(sym, msg)

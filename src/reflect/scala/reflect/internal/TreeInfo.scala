@@ -149,11 +149,11 @@ abstract class TreeInfo {
 
   /** Is `tree` admissible as a stable identifier pattern (8.1.5 Stable Identifier Patterns)?
    *
-   * We disregard volatility, as it's irrelevant in patterns (SI-6815)
+   * We disregard volatility, as it's irrelevant in patterns (scala/bug#6815)
    */
   def isStableIdentifierPattern(tree: Tree): Boolean = isStableIdentifier(tree, allowVolatile = true)
 
-  // TODO SI-5304 tighten this up so we don't elide side effect in module loads
+  // TODO scala/bug#5304 tighten this up so we don't elide side effect in module loads
   def isQualifierSafeToElide(tree: Tree): Boolean = isExprSafeToInline(tree)
 
   /** Is tree an expression which can be inlined without affecting program semantics?
@@ -189,7 +189,7 @@ abstract class TreeInfo {
       // However, before typing, applications of nullary functional values are also
       // Apply(function, Nil) trees. To prevent them from being treated as pure,
       // we check that the callee is a method.
-      // The callee might also be a Block, which has a null symbol, so we guard against that (SI-7185)
+      // The callee might also be a Block, which has a null symbol, so we guard against that (scala/bug#7185)
       fn.symbol != null && fn.symbol.isMethod && !fn.symbol.isLazy && isExprSafeToInline(fn)
     case Typed(expr, _) =>
       isExprSafeToInline(expr)
@@ -274,6 +274,7 @@ abstract class TreeInfo {
   def mayBeVarGetter(sym: Symbol): Boolean = sym.info match {
     case NullaryMethodType(_)              => sym.owner.isClass && !sym.isStable
     case PolyType(_, NullaryMethodType(_)) => sym.owner.isClass && !sym.isStable
+    case PolyType(_, mt @ MethodType(_, _))=> mt.isImplicit && sym.owner.isClass && !sym.isStable
     case mt @ MethodType(_, _)             => mt.isImplicit && sym.owner.isClass && !sym.isStable
     case _                                 => false
   }
@@ -365,7 +366,7 @@ abstract class TreeInfo {
 
   /** Is tree a self or super constructor call? */
   def isSelfOrSuperConstrCall(tree: Tree) = {
-    // stripNamedApply for SI-3584: adaptToImplicitMethod in Typers creates a special context
+    // stripNamedApply for scala/bug#3584: adaptToImplicitMethod in Typers creates a special context
     // for implicit search in constructor calls, adaptToImplicitMethod(isSelfOrConstrCall)
     val tree1 = stripNamedApplyBlock(tree)
     isSelfConstrCall(tree1) || isSuperConstrCall(tree1)
@@ -377,7 +378,7 @@ abstract class TreeInfo {
    * on information at the `parser` phase? To qualify, there
    * may be no subtree that will be interpreted as a
    * Stable Identifier Pattern, nor any type tests, even
-   * on TupleN. See SI-6968.
+   * on TupleN. See scala/bug#6968.
    *
    * For instance:
    *
@@ -480,7 +481,8 @@ abstract class TreeInfo {
         } map { dd =>
           val DefDef(dmods, dname, _, _, _, drhs) = dd
           // get access flags from DefDef
-          val vdMods = (vmods &~ Flags.AccessFlags) | (dmods & Flags.AccessFlags).flags
+          val defDefMask = Flags.AccessFlags | OVERRIDE | IMPLICIT | DEFERRED
+          val vdMods = (vmods &~ defDefMask) | (dmods & defDefMask).flags
           // for most cases lazy body should be taken from accessor DefDef
           val vdRhs = if (vmods.isLazy) lazyValDefRhs(drhs) else vrhs
           copyValDef(vd)(mods = vdMods, name = dname, rhs = vdRhs)
@@ -842,7 +844,7 @@ abstract class TreeInfo {
   object Unapplied {
     // Duplicated with `spliceApply`
     def unapply(tree: Tree): Option[Tree] = tree match {
-      // SI-7868 Admit Select() to account for numeric widening, e.g. <unapplySelector>.toInt
+      // scala/bug#7868 Admit Select() to account for numeric widening, e.g. <unapplySelector>.toInt
       case Apply(fun, (Ident(nme.SELECTOR_DUMMY)| Select(Ident(nme.SELECTOR_DUMMY), _)) :: Nil)
                          => Some(fun)
       case Apply(fun, _) => unapply(fun)

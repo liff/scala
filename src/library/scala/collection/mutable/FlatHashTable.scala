@@ -10,6 +10,9 @@ package scala
 package collection
 package mutable
 
+import java.lang.Integer.rotateRight
+import scala.util.hashing.byteswap32
+
 /** An implementation class backing a `HashSet`.
  *
  *  This trait is used internally. It can be mixed in with various collections relying on
@@ -44,9 +47,7 @@ trait FlatHashTable[A] extends FlatHashTable.HashUtils[A] {
 
   @transient protected var seedvalue: Int = tableSizeSeed
 
-  import HashTable.powerOfTwo
-
-  protected def capacity(expectedSize: Int) = if (expectedSize == 0) 1 else powerOfTwo(expectedSize)
+  protected def capacity(expectedSize: Int) = HashTable.nextPositivePowerOfTwo(expectedSize)
 
   /** The initial size of the hash table.
    */
@@ -328,7 +329,7 @@ trait FlatHashTable[A] extends FlatHashTable.HashUtils[A] {
     val ones = table.length - 1
     (improved >>> (32 - java.lang.Integer.bitCount(ones))) & ones
 
-    // version 3 (solves SI-5293 in most cases, but such a case would still arise for parallel hash tables)
+    // version 3 (solves scala/bug#5293 in most cases, but such a case would still arise for parallel hash tables)
     // val hc = improve(hcode)
     // val bbp = blockbitpos
     // val ones = table.length - 1
@@ -377,7 +378,7 @@ private[collection] object FlatHashTable {
    *  and ensure that iteration order vulnerabilities are not 'felt' in other
    *  hash tables.
    *
-   *  See SI-5293.
+   *  See scala/bug#5293.
    */
   final def seedGenerator = new ThreadLocal[scala.util.Random] {
     override def initialValue = new scala.util.Random
@@ -415,20 +416,7 @@ private[collection] object FlatHashTable {
     // so that:
     protected final def sizeMapBucketSize = 1 << sizeMapBucketBitSize
 
-    protected final def improve(hcode: Int, seed: Int) = {
-      //var h: Int = hcode + ~(hcode << 9)
-      //h = h ^ (h >>> 14)
-      //h = h + (h << 4)
-      //h ^ (h >>> 10)
-
-      val improved= scala.util.hashing.byteswap32(hcode)
-
-      // for the remainder, see SI-5293
-      // to ensure that different bits are used for different hash tables, we have to rotate based on the seed
-      val rotation = seed % 32
-      val rotated = (improved >>> rotation) | (improved << (32 - rotation))
-      rotated
-    }
+    protected final def improve(hcode: Int, seed: Int) = rotateRight(byteswap32(hcode), seed)
 
     /**
      * Elems have type A, but we store AnyRef in the table. Plus we need to deal with

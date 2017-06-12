@@ -20,16 +20,11 @@ class InlineInfoTest extends BytecodeTesting {
 
   override def compilerArgs = "-opt:l:classpath"
 
-  def notPerRun: List[Clearable] = List(
-    bTypes.classBTypeFromInternalName,
+  compiler.keepPerRunCachesAfterRun(List(
+    bTypes.classBTypeCacheFromSymbol,
+    bTypes.classBTypeCacheFromClassfile,
     bTypes.byteCodeRepository.compilingClasses,
-    bTypes.byteCodeRepository.parsedClasses)
-  notPerRun foreach global.perRunCaches.unrecordCache
-
-  def compile(code: String) = {
-    notPerRun.foreach(_.clear())
-    compiler.compileClasses(code)
-  }
+    bTypes.byteCodeRepository.parsedClasses))
 
   @Test
   def inlineInfosFromSymbolAndAttribute(): Unit = {
@@ -50,9 +45,9 @@ class InlineInfoTest extends BytecodeTesting {
         |}
         |class C extends T with U
       """.stripMargin
-    val classes = compile(code)
+    val classes = compileClasses(code)
 
-    val fromSyms = classes.map(c => global.genBCode.bTypes.classBTypeFromInternalName(c.name).info.get.inlineInfo)
+    val fromSyms = classes.map(c => global.genBCode.bTypes.cachedClassBType(c.name).get.info.get.inlineInfo)
 
     val fromAttrs = classes.map(c => {
       assert(c.attrs.asScala.exists(_.isInstanceOf[InlineInfoAttribute]), c.attrs)
@@ -71,7 +66,7 @@ class InlineInfoTest extends BytecodeTesting {
         |}
       """.stripMargin
     compileClasses("class C { new A }", javaCode = List((jCode, "A.java")))
-    val info = global.genBCode.bTypes.classBTypeFromInternalName("A").info.get.inlineInfo
+    val info = global.genBCode.bTypes.cachedClassBType("A").get.info.get.inlineInfo
     assertEquals(info.methodInfos, Map(
       "bar()I"    -> MethodInlineInfo(true,false,false),
       "<init>()V" -> MethodInlineInfo(false,false,false),

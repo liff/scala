@@ -79,7 +79,7 @@ abstract class BCodeSkelBuilder extends BCodeHelpers {
     def tpeTK(tree: Tree): BType = typeToBType(tree.tpe)
 
     def log(msg: => AnyRef) {
-      global synchronized { global.log(msg) }
+      frontendLock synchronized { global.log(msg) }
     }
 
     /* ---------------- helper utils for generating classes and fields ---------------- */
@@ -255,7 +255,6 @@ abstract class BCodeSkelBuilder extends BCodeHelpers {
     // used by genLoadTry() and genSynchronized()
     var earlyReturnVar: Symbol     = null
     var shouldEmitCleanup          = false
-    var insideCleanupBlock         = false
     // line numbers
     var lastEmittedLineNr          = -1
 
@@ -462,10 +461,10 @@ abstract class BCodeSkelBuilder extends BCodeHelpers {
       locals.reset(isStaticMethod = methSymbol.isStaticMember)
       jumpDest = immutable.Map.empty[ /* LabelDef */ Symbol, asm.Label ]
       // populate labelDefsAtOrUnder
-      val ldf = new LabelDefsFinder
-      ldf.traverse(dd.rhs)
-      labelDefsAtOrUnder = ldf.result.withDefaultValue(Nil)
-      labelDef = labelDefsAtOrUnder(dd.rhs).map(ld => (ld.symbol -> ld)).toMap
+      val ldf = new LabelDefsFinder(dd.rhs)
+      ldf(dd.rhs)
+      labelDefsAtOrUnder = ldf.result
+      labelDef = ldf.directResult.map(ld => (ld.symbol -> ld)).toMap
       // check previous invocation of genDefDef exited as many varsInScope as it entered.
       assert(varsInScope == null, "Unbalanced entering/exiting of GenBCode's genBlock().")
       // check previous invocation of genDefDef unregistered as many cleanups as it registered.
@@ -495,7 +494,7 @@ abstract class BCodeSkelBuilder extends BCodeHelpers {
               genDefDef(statified)
             } else {
               val forwarderDefDef = {
-                val dd1 = global.gen.mkStatic(deriveDefDef(dd)(_ => EmptyTree), traitSuperAccessorName(sym), _.cloneSymbol)
+                val dd1 = global.gen.mkStatic(deriveDefDef(dd)(_ => EmptyTree), traitSuperAccessorName(sym), _.cloneSymbol.withoutAnnotations)
                 dd1.symbol.setFlag(Flags.ARTIFACT).resetFlag(Flags.OVERRIDE)
                 val selfParam :: realParams = dd1.vparamss.head.map(_.symbol)
                 deriveDefDef(dd1)(_ =>
@@ -565,7 +564,7 @@ abstract class BCodeSkelBuilder extends BCodeHelpers {
       // debug assert((params.map(p => locals(p.symbol).tk)) == asmMethodType(methSymbol).getArgumentTypes.toList, "debug")
 
       if (params.size > MaximumJvmParameters) {
-        // SI-7324
+        // scala/bug#7324
         reporter.error(methSymbol.pos, s"Platform restriction: a parameter list's length cannot exceed $MaximumJvmParameters.")
         return
       }
@@ -592,7 +591,7 @@ abstract class BCodeSkelBuilder extends BCodeHelpers {
        * but the same vars (given by the LabelDef's params) can be reused,
        * because no LabelDef ends up nested within itself after such duplication.
        */
-      for(ld <- labelDefsAtOrUnder(dd.rhs); ldp <- ld.params; if !locals.contains(ldp.symbol)) {
+      for(ld <- labelDefsAtOrUnder.getOrElse(dd.rhs, Nil); ldp <- ld.params; if !locals.contains(ldp.symbol)) {
         // the tail-calls xform results in symbols shared btw method-params and labelDef-params, thus the guard above.
         locals.makeLocal(ldp.symbol)
       }

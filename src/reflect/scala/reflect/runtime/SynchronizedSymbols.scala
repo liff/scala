@@ -10,7 +10,9 @@ private[reflect] trait SynchronizedSymbols extends internal.Symbols { self: Symb
   private lazy val atomicIds = new java.util.concurrent.atomic.AtomicInteger(0)
   override protected def nextId() = atomicIds.incrementAndGet()
 
+  @deprecated("Global existential IDs no longer used", "2.12.1")
   private lazy val atomicExistentialIds = new java.util.concurrent.atomic.AtomicInteger(0)
+  @deprecated("Global existential IDs no longer used", "2.12.1")
   override protected def nextExistentialId() = atomicExistentialIds.incrementAndGet()
 
   private lazy val _recursionTable = mkThreadLocalStorage(immutable.Map.empty[Symbol, Int])
@@ -132,17 +134,19 @@ private[reflect] trait SynchronizedSymbols extends internal.Symbols { self: Symb
     override def typeParams: List[Symbol] = gilSynchronizedIfNotThreadsafe {
       if (isCompilerUniverse) super.typeParams
       else {
-        if (isMonomorphicType) Nil
-        else {
-          // analogously to the "info" getter, here we allow for two completions:
-          //   one: sourceCompleter to LazyType, two: LazyType to completed type
-          if (validTo == NoPeriod)
+        def completeTypeParams = {
+          if (isMonomorphicType) Nil
+          else {
+            // analogously to the "info" getter, here we allow for two completions:
+            //   one: sourceCompleter to LazyType, two: LazyType to completed type
             rawInfo load this
-          if (validTo == NoPeriod)
-            rawInfo load this
+            if (validTo == NoPeriod)
+              rawInfo load this
 
-          rawInfo.typeParams
+            rawInfo.typeParams
+          }
         }
+        if (validTo != NoPeriod) rawInfo.typeParams else completeTypeParams
       }
     }
     override def unsafeTypeParams: List[Symbol] = gilSynchronizedIfNotThreadsafe {

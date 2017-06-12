@@ -8,7 +8,11 @@ Third, we'd like to support different output formats. An html page per chapter w
 
 ## Editing
 
-We use Jekyll 2 and [Redcarpet](https://github.com/vmg/redcarpet) to generate the html. Essentially, this is what github pages use.
+At the time of writing we are using Jekyll 3.3.0 and [Redcarpet 3.3.2](https://github.com/vmg/redcarpet) to generate the html.
+
+Check `Gemfile` for the current versions.
+
+We aim to track the configuration GitHub Pages use but at times differences will arise as GitHub Pages evolves.
 
 ## Building
 
@@ -36,5 +40,5 @@ and open http://0.0.0.0:4000/. Jekyll will rebuild as you edit the markdown, but
 
 ### Unicode Character replacements
 
-- The unicode  left and right single  quotation marks (‘ and  ’) have been used in  place of ` and  ', where the quotation marks  are intended to  be paired. These can  be typed on  a mac using  Option+] for a left  quote and Option+Shift+] for the right quote.
-- Similarly for left and right double quotation marks (“ and ”) in place of ". These can be typed on a mac using Option+[ and Option+Shift+].
+- The unicode  left and right single  quotation marks (‘ and ’ (U+2018 and U+2019, respectively)) have been used in  place of ` and ', where the quotation marks  are intended to  be paired. These can  be typed on  a mac using  Option+] for a left  quote and Option+Shift+] for the right quote.
+- Similarly for left and right double quotation marks (“ and ” (U+201C and U+201D, respectively)) in place of ". These can be typed on a mac using Option+[ and Option+Shift+].

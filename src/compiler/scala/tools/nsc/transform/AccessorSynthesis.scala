@@ -99,7 +99,7 @@ trait AccessorSynthesis extends Transform with ast.TreeDSL {
   }
 
 
-  // TODO: better way to communicate from info transform to tree transfor?
+  // TODO: better way to communicate from info transform to tree transform?
   private[this] val _bitmapInfo  = perRunCaches.newMap[Symbol, BitmapInfo]
   private[this] val _slowPathFor = perRunCaches.newMap[Symbol, Symbol]()
 
@@ -217,7 +217,7 @@ trait AccessorSynthesis extends Transform with ast.TreeDSL {
     protected def needsInitFlag(sym: Symbol): Boolean =
     sym.isGetter &&
       !( sym.isInitializedToDefault
-        || isConstantType(sym.info.finalResultType) // SI-4742
+        || isConstantType(sym.info.finalResultType) // scala/bug#4742
         || sym.hasFlag(PARAMACCESSOR | SPECIALIZED | LAZY)
         || sym.accessed.hasFlag(PRESUPER)
         || sym.isOuterAccessor
@@ -332,7 +332,7 @@ trait AccessorSynthesis extends Transform with ast.TreeDSL {
 
         val isUnit    = isUnitGetter(lazyAccessor)
         val selectVar = if (isUnit) UNIT         else Select(thisRef, lazyVar)
-        val storeRes  = if (isUnit) rhsAtSlowDef else Assign(selectVar, rhsAtSlowDef)
+        val storeRes  = if (isUnit) rhsAtSlowDef else Assign(selectVar, fields.castHack(rhsAtSlowDef, lazyVar.info))
 
         def needsInit = mkTest(lazyAccessor)
         val doInit = Block(List(storeRes), mkSetFlag(lazyAccessor))
