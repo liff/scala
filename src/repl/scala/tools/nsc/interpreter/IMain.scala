@@ -112,11 +112,8 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
     try body finally label = saved
   }
 
-  // the expanded prompt but without color escapes and without leading newline, for purposes of indenting
-  lazy val formatting = Formatting.forPrompt(replProps.promptText)
   lazy val reporter: ReplReporter = new ReplReporter(this)
 
-  import formatting.indentCode
   import reporter.{ printMessage, printUntruncatedMessage }
 
   // This exists mostly because using the reporter too early leads to deadlock.
@@ -134,7 +131,7 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
     catch AbstractOrMissingHandler()
   }
   private val logScope = scala.sys.props contains "scala.repl.scope"
-  private def scopelog(msg: String) = if (logScope) Console.err.println(msg)
+  private def scopelog(msg: => String) = if (logScope) Console.err.println(msg)
 
   // argument is a thunk to execute after init is done
   def initialize(postInitSignal: => Unit) {
@@ -377,24 +374,25 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
     None
   }
 
-  private def updateReplScope(sym: Symbol, isDefined: Boolean) {
-    def log(what: String) {
+  private def updateReplScope(sym: Symbol, isDefined: Boolean): Unit = {
+    def log(what: String) = scopelog {
       val mark = if (sym.isType) "t " else "v "
       val name = exitingTyper(sym.nameString)
       val info = cleanTypeAfterTyper(sym)
       val defn = sym defStringSeenAs info
 
-      scopelog(f"[$mark$what%6s] $name%-25s $defn%s")
+      f"[$mark$what%6s] $name%-25s $defn%s"
     }
-    if (ObjectClass isSubClass sym.owner) return
-    // unlink previous
-    replScope lookupAll sym.name foreach { sym =>
-      log("unlink")
-      replScope unlink sym
+    if (!ObjectClass.isSubClass(sym.owner)) {
+      // unlink previous
+      replScope.lookupAll(sym.name) foreach { sym =>
+        log("unlink")
+        replScope unlink sym
+      }
+      val what = if (isDefined) "define" else "import"
+      log(what)
+      replScope enter sym
     }
-    val what = if (isDefined) "define" else "import"
-    log(what)
-    replScope enter sym
   }
 
   def recordRequest(req: Request) {
@@ -866,8 +864,8 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
         |${preambleHeader format lineRep.readName}
         |${envLines mkString ("  ", ";\n  ", ";\n")}
         |$importsPreamble
-        |%s""".stripMargin.format(indentCode(toCompute))
-      def preambleLength = preamble.length - toCompute.length - 1
+        |${toCompute}""".stripMargin
+      def preambleLength = preamble.length - toCompute.length
 
       val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
 

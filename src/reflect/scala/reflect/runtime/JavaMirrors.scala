@@ -11,7 +11,8 @@ import java.lang.{Class => jClass, Package => jPackage}
 import java.lang.reflect.{
   Method => jMethod, Constructor => jConstructor, Field => jField,
   Member => jMember, Type => jType, TypeVariable => jTypeVariable,
-  GenericDeclaration, GenericArrayType, ParameterizedType, WildcardType, AnnotatedElement }
+  Modifier => jModifier, GenericDeclaration, GenericArrayType,
+  ParameterizedType, WildcardType, AnnotatedElement }
 import java.lang.annotation.{Annotation => jAnnotation}
 import java.io.IOException
 import scala.reflect.internal.{ MissingRequirementError, JavaAccFlags }
@@ -552,7 +553,7 @@ private[scala] trait JavaMirrors extends internal.SymbolTable with api.JavaUnive
     }
 
     def javaClass(path: String): jClass[_] =
-      jClass.forName(path, true, classLoader)
+      jClass.forName(path, false, classLoader)
 
     /** Does `path` correspond to a Java class with that fully qualified name in the current class loader? */
     def tryJavaClass(path: String): Option[jClass[_]] = (
@@ -675,7 +676,7 @@ private[scala] trait JavaMirrors extends internal.SymbolTable with api.JavaUnive
 
     /**
      * Copy all annotations of Java annotated element `jann` over to Scala symbol `sym`.
-     * Also creates `@throws` annotations if necessary.
+     * Also creates `@throws`, `@transient`, `@native`, and `@volatile` annotations if necessary.
      *  Pre: `sym` is already initialized with a concrete type.
      *  Note: If `sym` is a method or constructor, its parameter annotations are copied as well.
      */
@@ -688,6 +689,11 @@ private[scala] trait JavaMirrors extends internal.SymbolTable with api.JavaUnive
         case _                        => Nil
       }
       jexTpes foreach (jexTpe => sym.addThrowsAnnotation(classSymbol(jexTpe)))
+      jann match {
+        case mem: jMember =>
+          mem.javaFlags.toScalaAnnotations(thisUniverse) foreach (ann => sym.addAnnotation(ann))
+        case _ =>
+      }
     }
 
     private implicit class jClassOps(val clazz: jClass[_]) {
@@ -1218,7 +1224,7 @@ private[scala] trait JavaMirrors extends internal.SymbolTable with api.JavaUnive
         // suggested in https://github.com/scala/bug/issues/4023#issuecomment-292387855
         var ownerClazz = classToJava(clazz.owner.asClass)
         if (childOfTopLevelObject)
-          ownerClazz = jClass.forName(ownerClazz.getName stripSuffix "$", true, ownerClazz.getClassLoader)
+          ownerClazz = jClass.forName(ownerClazz.getName stripSuffix "$", false, ownerClazz.getClassLoader)
 
         val ownerChildren = ownerClazz.getDeclaredClasses
 

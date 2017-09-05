@@ -15,18 +15,19 @@ import scala.tools.testing.BytecodeTesting
 @RunWith(classOf[JUnit4])
 class BTypesFromClassfileTest extends BytecodeTesting {
   // inliner enabled -> inlineInfos are collected (and compared) in ClassBTypes
-  override def compilerArgs = "-opt:inline-global"
+  override def compilerArgs = "-opt:inline -opt-inline-from:**"
 
   import compiler.global._
   import definitions._
   import genBCode.bTypes
   import bTypes._
+  import genBCode.postProcessor.bTypesFromClassfile._
 
   def duringBackend[T](f: => T) = global.exitingDelambdafy(f)
 
-  val run = new global.Run() // initializes some of the compiler
-  duringBackend(global.scalaPrimitives.init()) // needed: it's only done when running the backend, and we don't actually run the compiler
-  duringBackend(bTypes.initializeCoreBTypes())
+  locally {
+    new global.Run() // initializes some of the compiler
+  }
 
   def clearCache() = {
     bTypes.classBTypeCacheFromSymbol.clear()

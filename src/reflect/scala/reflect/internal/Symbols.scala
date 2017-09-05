@@ -1397,15 +1397,15 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     def newTypeSymbol(name: TypeName, pos: Position = NoPosition, newFlags: Long = 0L): TypeSymbol =
       newNonClassSymbol(name, pos, newFlags)
 
-    /** The class or term up to which this symbol is accessible,
-     *  or RootClass if it is public.  As java protected statics are
-     *  otherwise completely inaccessible in scala, they are treated
-     *  as public.
+    /**
+     * The class or term up to which this symbol is accessible, or RootClass if it is public. As
+     * Java protected statics are otherwise completely inaccessible in Scala, they are treated as
+     * public (scala/bug#1806).
      */
     def accessBoundary(base: Symbol): Symbol = {
       if (hasFlag(PRIVATE) || isLocalToBlock) owner
       else if (hasAllFlags(PROTECTED | STATIC | JAVA)) enclosingRootClass
-      else if (hasAccessBoundary && !phase.erasedTypes) privateWithin
+      else if (hasAccessBoundary && !phase.erasedTypes) privateWithin // Phase check needed? See comment in Context.isAccessible.
       else if (hasFlag(PROTECTED)) base
       else enclosingRootClass
     }
@@ -2375,16 +2375,14 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
     /** Returns all symbols overridden by this symbol. */
     final def allOverriddenSymbols: List[Symbol] = {
-      @tailrec
-      def loop(xs: List[Symbol], result: List[Symbol]): List[Symbol] = xs match {
-        case Nil     => result
-        case x :: xs =>
-          overriddenSymbol(x) match {
-            case NoSymbol => loop(xs, result)
-            case sym      => loop(xs, sym :: result)
-          }
-      }
-      if (isOverridingSymbol) loop(owner.ancestors, Nil) else Nil
+      if (isOverridingSymbol) {
+        // performance sensitive
+        val builder = List.newBuilder[Symbol]
+        for (o <- owner.ancestors) {
+          overriddenSymbol(o).andAlso(builder += _)
+        }
+        builder.result()
+      } else Nil
     }
 
     /** Equivalent to allOverriddenSymbols.nonEmpty, but more efficient. */
