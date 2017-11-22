@@ -370,6 +370,7 @@ trait ScalaSettings extends AbsScalaSettings
 
   val YoptLogInline = StringSetting("-Yopt-log-inline", "package/Class.method", "Print a summary of inliner activity; `_` to print all, prefix match to select.", "")
 
+  import scala.reflect.internal.util.Statistics
   object YstatisticsPhases extends MultiChoiceEnumeration { val parser, typer, patmat, erasure, cleanup, jvm = Value }
   val Ystatistics = {
     val description = "Print compiler statistics for specific phases"
@@ -379,10 +380,12 @@ trait ScalaSettings extends AbsScalaSettings
       descr   = description,
       domain  = YstatisticsPhases,
       default = Some(List("_"))
-    ) withPostSetHook { _ => scala.reflect.internal.util.Statistics.enabled = true }
+    )
   }
+  override def YstatisticsEnabled = Ystatistics.value.nonEmpty
 
-  def YstatisticsEnabled = Ystatistics.value.nonEmpty
+  val YhotStatistics = BooleanSetting("-Yhot-statistics-enabled", s"Enable `${Ystatistics.name}` to print hot statistics.")
+  override def YhotStatisticsEnabled = YhotStatistics.value
 
   val YprofileEnabled = BooleanSetting("-Yprofile-enabled", "Enable profiling.")
   val YprofileDestination = StringSetting("-Yprofile-destination", "file", "where to send profiling output - specify a file, default is to the console.", "").

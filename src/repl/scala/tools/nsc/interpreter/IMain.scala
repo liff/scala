@@ -156,9 +156,9 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
   }
 
   import global._
-  import definitions.{ ObjectClass, termMember, dropNullaryMethod}
+  import definitions.{ObjectClass, termMember, dropNullaryMethod}
 
-  lazy val runtimeMirror = ru.runtimeMirror(classLoader)
+  def runtimeMirror = ru.runtimeMirror(classLoader)
 
   private def noFatal(body: => Symbol): Symbol = try body catch { case _: FatalError => NoSymbol }
 
@@ -357,8 +357,8 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
       _runtimeClassLoader
     })
 
-  // Set the current Java "context" class loader to this interpreter's class loader
-  def setContextClassLoader() = classLoader.setAsContext()
+  @deprecated("The thread context classloader is now set and restored around execution of REPL line, this method is now a no-op.", since = "2.12.0")
+  def setContextClassLoader() = () // Called from sbt-interface/0.12.4/src/ConsoleInterface.scala:39
 
   def allDefinedNames: List[Name]  = exitingTyper(replScope.toList.map(_.name).sorted)
   def unqualifiedIds: List[String] = allDefinedNames map (_.decode) sorted
@@ -961,7 +961,7 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
 
         // compile the result-extraction object
         val handls = if (printResults) handlers else Nil
-        withoutWarnings(lineRep compile ResultObjectSourceCode(handls))
+        IMain.withSuppressedSettings(settings, global)(lineRep compile ResultObjectSourceCode(handls))
       }
     }
 
@@ -1038,14 +1038,15 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
   // Given the fullName of the symbol, reflectively drill down the path
   def valueOfTerm(id: String): Option[Any] = {
     def value(fullName: String) = {
-      import runtimeMirror.universe.{Symbol, InstanceMirror, TermName}
+      val mirror = runtimeMirror
+      import mirror.universe.{Symbol, InstanceMirror, TermName}
       val pkg :: rest = (fullName split '.').toList
-      val top = runtimeMirror.staticPackage(pkg)
+      val top = mirror.staticPackage(pkg)
       @annotation.tailrec
       def loop(inst: InstanceMirror, cur: Symbol, path: List[String]): Option[Any] = {
         def mirrored =
           if (inst != null) inst
-          else runtimeMirror.reflect((runtimeMirror reflectModule cur.asModule).instance)
+          else mirror.reflect((mirror reflectModule cur.asModule).instance)
 
         path match {
           case last :: Nil  =>
@@ -1057,10 +1058,10 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
             val i =
               if (s.isModule) {
                 if (inst == null) null
-                else runtimeMirror.reflect((inst reflectModule s.asModule).instance)
+                else mirror.reflect((inst reflectModule s.asModule).instance)
               }
               else if (s.isAccessor) {
-                runtimeMirror.reflect(mirrored.reflectMethod(s.asMethod).apply())
+                mirror.reflect(mirrored.reflectMethod(s.asMethod).apply())
               }
               else {
                 assert(false, originalPath(s))
@@ -1244,6 +1245,33 @@ object IMain {
   private def removeIWPackages(s: String)  = s.replaceAll("""\$(iw|read|eval|print)[$.]""", "")
   def stripString(s: String)               = removeIWPackages(removeLineWrapper(s))
 
+  private[interpreter] def withSuppressedSettings[A](settings: Settings, global: => Global)(body: => A): A = {
+    import settings._
+    val wasWarning = !nowarn
+    val noisy = List(Xprint, Ytyperdebug, browse)
+    val current = (Xprint.value, Ytyperdebug.value, browse.value)
+    val noisesome = wasWarning || noisy.exists(!_.isDefault)
+    if (isReplDebug || !noisesome) body
+    else {
+      Xprint.value = List.empty
+      browse.value = List.empty
+      Ytyperdebug.value = false
+      if (wasWarning) nowarn.value = true
+      try body
+      finally {
+        Xprint.value       = current._1
+        Ytyperdebug.value  = current._2
+        browse.value       = current._3
+        if (wasWarning) nowarn.value = false
+        // ctl-D in repl can result in no compiler
+        val g = global
+        if (g != null) {
+          g.printTypings = current._2
+        }
+      }
+    }
+  }
+
   trait CodeAssembler[T] {
     def preamble: String
     def generate: T => String
@@ -1285,7 +1313,7 @@ object IMain {
     def isStripping        = isettings.unwrapStrings
     def isTruncating       = reporter.truncationOK
 
-    def stripImpl(str: String): String = naming.unmangle(str)
+    def stripImpl(str: String): String = if (isInitializeComplete) naming.unmangle(str) else str
   }
   private[interpreter] def defaultSettings = new Settings()
   private[scala] def defaultOut = new NewLinePrintWriter(new ConsoleWriter, true)
@@ -1293,4 +1321,3 @@ object IMain {
   /** construct an interpreter that reports to Console */
   def apply(initialSettings: Settings = defaultSettings, out: JPrintWriter = defaultOut) = new IMain(initialSettings, out)
 }
-

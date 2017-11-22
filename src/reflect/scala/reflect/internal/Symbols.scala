@@ -9,7 +9,7 @@ package internal
 
 import scala.collection.immutable
 import scala.collection.mutable.ListBuffer
-import util.{ Statistics, shortClassOfInstance }
+import util.{ Statistics, shortClassOfInstance, StatisticsStatics }
 import Flags._
 import scala.annotation.tailrec
 import scala.reflect.io.{ AbstractFile, NoAbstractFile }
@@ -17,9 +17,10 @@ import Variance._
 
 trait Symbols extends api.Symbols { self: SymbolTable =>
   import definitions._
-  import SymbolsStats._
+  import statistics._
 
   protected var ids = 0
+  def getCurrentSymbolIdCount: Int = ids
 
   protected def nextId() = { ids += 1; ids }
 
@@ -766,7 +767,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     }
 
     final def flags: Long = {
-      if (Statistics.hotEnabled) Statistics.incCounter(flagsCount)
+      if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(flagsCount)
       val fs = _rawflags & phase.flagMask
       (fs | ((fs & LateFlags) >>> LateShift)) & ~((fs & AntiFlags) >>> AntiShift)
     }
@@ -1196,7 +1197,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
      * `assertOwner` aborts compilation immediately if called on NoSymbol.
      */
     def owner: Symbol = {
-      if (Statistics.hotEnabled) Statistics.incCounter(ownerCount)
+      if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(ownerCount)
       rawowner
     }
     final def safeOwner: Symbol   = if (this eq NoSymbol) NoSymbol else owner
@@ -1398,13 +1399,11 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       newNonClassSymbol(name, pos, newFlags)
 
     /**
-     * The class or term up to which this symbol is accessible, or RootClass if it is public. As
-     * Java protected statics are otherwise completely inaccessible in Scala, they are treated as
-     * public (scala/bug#1806).
+     * The class or term up to which this symbol is accessible, or else
+     * `enclosingRootClass` if it is public.
      */
     def accessBoundary(base: Symbol): Symbol = {
       if (hasFlag(PRIVATE) || isLocalToBlock) owner
-      else if (hasAllFlags(PROTECTED | STATIC | JAVA)) enclosingRootClass
       else if (hasAccessBoundary && !phase.erasedTypes) privateWithin // Phase check needed? See comment in Context.isAccessible.
       else if (hasFlag(PROTECTED)) base
       else enclosingRootClass
@@ -2767,7 +2766,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     private[this] var _rawname: TermName = initName
     def rawname = _rawname
     def name = {
-      if (Statistics.hotEnabled) Statistics.incCounter(nameCount)
+      if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(nameCount)
       _rawname
     }
     override def name_=(name: Name) {
@@ -2901,13 +2900,13 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     override def moduleClass = referenced
 
     override def owner = {
-      if (Statistics.hotEnabled) Statistics.incCounter(ownerCount)
+      if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(ownerCount)
       // a non-static module symbol gets the METHOD flag in uncurry's info transform -- see isModuleNotMethod
       if (!isMethod && needsFlatClasses) rawowner.owner
       else rawowner
     }
     override def name: TermName = {
-      if (Statistics.hotEnabled) Statistics.incCounter(nameCount)
+      if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(nameCount)
       if (!isMethod && needsFlatClasses) {
         if (flatname eq null)
           flatname = nme.flattenedName(rawowner.name, rawname)
@@ -3039,7 +3038,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
     def rawname = _rawname
     def name = {
-      if (Statistics.hotEnabled) Statistics.incCounter(nameCount)
+      if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(nameCount)
       _rawname
     }
     final def asNameType(n: Name) = n.toTypeName
@@ -3166,7 +3165,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
      * info for T in Test1 should be >: Nothing <: Test3[_]
      */
 
-    if (Statistics.hotEnabled) Statistics.incCounter(typeSymbolCount)
+    if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(typeSymbolCount)
   }
   implicit val TypeSymbolTag = ClassTag[TypeSymbol](classOf[TypeSymbol])
 
@@ -3326,12 +3325,12 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     }
 
     override def owner: Symbol = {
-      if (Statistics.hotEnabled) Statistics.incCounter(ownerCount)
+      if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(ownerCount)
       if (needsFlatClasses) rawowner.owner else rawowner
     }
 
     override def name: TypeName = {
-      if (Statistics.canEnable) Statistics.incCounter(nameCount)
+      if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(nameCount)
       if (needsFlatClasses) {
         if (flatname eq null)
           flatname = tpnme.flattenedName(rawowner.name, rawname)
@@ -3387,7 +3386,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       else super.toString
     )
 
-    if (Statistics.hotEnabled) Statistics.incCounter(classSymbolCount)
+    if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(classSymbolCount)
   }
   implicit val ClassSymbolTag = ClassTag[ClassSymbol](classOf[ClassSymbol])
 
@@ -3721,12 +3720,6 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     case _           => true
   }
 
-
-// -------------- Statistics --------------------------------------------------------
-
-  Statistics.newView("#symbols")(ids)
-
-
 // -------------- Completion --------------------------------------------------------
 
   // is used to differentiate levels of thread-safety in `Symbol.isThreadsafe`
@@ -3745,10 +3738,13 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   def markAllCompleted(syms: Symbol*): Unit = forEachRelevantSymbols(syms, _.markAllCompleted)
 }
 
-object SymbolsStats {
-  val typeSymbolCount     = Statistics.newCounter("#type symbols")
-  val classSymbolCount    = Statistics.newCounter("#class symbols")
-  val flagsCount          = Statistics.newCounter("#flags ops")
-  val ownerCount          = Statistics.newCounter("#owner ops")
-  val nameCount           = Statistics.newCounter("#name ops")
+trait SymbolsStats {
+  self: Statistics =>
+  val symbolTable: SymbolTable
+  val symbolsCount        = newView("#symbols")(symbolTable.getCurrentSymbolIdCount)
+  val typeSymbolCount     = newCounter("#type symbols")
+  val classSymbolCount    = newCounter("#class symbols")
+  val flagsCount          = newCounter("#flags ops")
+  val ownerCount          = newCounter("#owner ops")
+  val nameCount           = newCounter("#name ops")
 }

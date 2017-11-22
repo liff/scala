@@ -10,7 +10,7 @@ package internal
 import Flags._
 import scala.collection.mutable
 import scala.reflect.macros.Attachments
-import util.Statistics
+import util.{Statistics, StatisticsStatics}
 
 trait Trees extends api.Trees {
   self: SymbolTable =>
@@ -38,7 +38,8 @@ trait Trees extends api.Trees {
     val id = nodeCount // TODO: add to attachment?
     nodeCount += 1
 
-    if (Statistics.canEnable) Statistics.incCounter(TreesStats.nodeByType, getClass)
+    if (StatisticsStatics.areSomeHotStatsEnabled())
+      statistics.incCounter(statistics.nodeByType, getClass)
 
     final override def pos: Position = rawatt.pos
 
@@ -1602,15 +1603,19 @@ trait Trees extends api.Trees {
         subst(from, to)
         tree match {
           case _: DefTree =>
-            val newInfo = symSubst(tree.symbol.info)
-            if (!(newInfo =:= tree.symbol.info)) {
-              debuglog(sm"""
-                |TreeSymSubstituter: updated info of symbol ${tree.symbol}
-                |  Old: ${showRaw(tree.symbol.info, printTypes = true, printIds = true)}
-                |  New: ${showRaw(newInfo, printTypes = true, printIds = true)}""")
-              mutatedSymbols ::= tree.symbol
-              tree.symbol updateInfo newInfo
+            def update(sym: Symbol) = {
+              val newInfo = symSubst(sym.info)
+              if (!(newInfo =:= sym.info)) {
+                debuglog(sm"""
+                  |TreeSymSubstituter: updated info of symbol ${sym}
+                  |  Old: ${showRaw(sym.info, printTypes = true, printIds = true)}
+                  |  New: ${showRaw(newInfo, printTypes = true, printIds = true)}""")
+                mutatedSymbols ::= sym
+                sym updateInfo newInfo
+              }
             }
+            update(tree.symbol)
+            if (tree.symbol.isModule) update(tree.symbol.moduleClass)
           case _          =>
             // no special handling is required for Function or Import nodes here.
             // as they don't have interesting infos attached to their symbols.
@@ -1910,11 +1915,13 @@ trait Trees extends api.Trees {
   implicit val UnApplyTag             = ClassTag[UnApply](classOf[UnApply])
   implicit val ValDefTag              = ClassTag[ValDef](classOf[ValDef])
   implicit val ValOrDefDefTag         = ClassTag[ValOrDefDef](classOf[ValOrDefDef])
-
-  val treeNodeCount = Statistics.newView("#created tree nodes")(nodeCount)
 }
 
-object TreesStats {
-  // statistics
-  val nodeByType = Statistics.newByClass("#created tree nodes by type")(Statistics.newCounter(""))
+trait TreesStats {
+  self: Statistics =>
+  val symbolTable: SymbolTable
+  val treeNodeCount = newView("#created tree nodes")(symbolTable.nodeCount)
+  val nodeByType = newByClass("#created tree nodes by type")(newCounter(""))
+  val retainedCount  = newCounter("#retained tree nodes")
+  val retainedByType = newByClass("#retained tree nodes by type")(newCounter(""))
 }

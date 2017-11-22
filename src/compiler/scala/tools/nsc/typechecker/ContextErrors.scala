@@ -607,13 +607,13 @@ trait ContextErrors {
 
       //doTypedApply - patternMode
       def TooManyArgsPatternError(fun: Tree) =
-        NormalTypeError(fun, "too many arguments for unapply pattern, maximum = "+definitions.MaxTupleArity)
+        issueNormalTypeError(fun, "too many arguments for unapply pattern, maximum = "+definitions.MaxTupleArity)
 
       def BlackboxExtractorExpansion(fun: Tree) =
-        NormalTypeError(fun, "extractor macros can only be whitebox")
+        issueNormalTypeError(fun, "extractor macros can only be whitebox")
 
       def WrongShapeExtractorExpansion(fun: Tree) =
-        NormalTypeError(fun, "extractor macros can only expand into extractor calls")
+        issueNormalTypeError(fun, "extractor macros can only expand into extractor calls")
 
       def WrongNumberOfArgsError(tree: Tree, fun: Tree) =
         NormalTypeError(tree, "wrong number of arguments for "+ treeSymTypeMsg(fun))
@@ -1337,8 +1337,12 @@ trait ContextErrors {
       context.warning(arg.pos, note)
     }
 
-    def UnknownParameterNameNamesDefaultError(arg: Tree, name: Name)(implicit context: Context) = {
-      issueNormalTypeError(arg, "unknown parameter name: " + name)
+    def UnknownParameterNameNamesDefaultError(arg: Tree, name: Name, isVariableInScope: Boolean)(implicit context: Context) = {
+      val suffix =
+        if (isVariableInScope)
+          s"\nNote that assignments in argument position are no longer allowed since Scala 2.13.\nTo express the assignment expression, wrap it in brackets, e.g., `{ $name = ... }`."
+        else ""
+      issueNormalTypeError(arg, s"unknown parameter name: $name$suffix")
       setError(arg)
     }
 

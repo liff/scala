@@ -2,7 +2,7 @@ package scala.tools.nsc
 package backend.jvm
 
 import scala.collection.mutable.ListBuffer
-import scala.reflect.internal.util.NoPosition
+import scala.reflect.internal.util.{NoPosition, Statistics}
 import scala.reflect.io.AbstractFile
 import scala.tools.asm.ClassWriter
 import scala.tools.asm.tree.ClassNode
@@ -13,24 +13,25 @@ import scala.tools.nsc.backend.jvm.opt._
  * Implements late stages of the backend that don't depend on a Global instance, i.e.,
  * optimizations, post-processing and classfile serialization and writing.
  */
-abstract class PostProcessor extends PerRunInit {
+abstract class PostProcessor(statistics: Statistics with BackendStats) extends PerRunInit {
   self =>
   val bTypes: BTypes
 
   import bTypes._
   import frontendAccess.{backendReporting, compilerSettings, recordPerRunCache}
 
-  val backendUtils        : BackendUtils { val postProcessor: self.type }        = new { val postProcessor: self.type = self } with BackendUtils
-  val byteCodeRepository  : ByteCodeRepository { val postProcessor: self.type }  = new { val postProcessor: self.type = self } with ByteCodeRepository
-  val localOpt            : LocalOpt { val postProcessor: self.type }            = new { val postProcessor: self.type = self } with LocalOpt
-  val inliner             : Inliner { val postProcessor: self.type }             = new { val postProcessor: self.type = self } with Inliner
-  val inlinerHeuristics   : InlinerHeuristics { val postProcessor: self.type }   = new { val postProcessor: self.type = self } with InlinerHeuristics
-  val closureOptimizer    : ClosureOptimizer { val postProcessor: self.type }    = new { val postProcessor: self.type = self } with ClosureOptimizer
-  val callGraph           : CallGraph { val postProcessor: self.type }           = new { val postProcessor: self.type = self } with CallGraph
+  val backendUtils        : BackendUtils        { val postProcessor: self.type } = new { val postProcessor: self.type = self } with BackendUtils
+  val byteCodeRepository  : ByteCodeRepository  { val postProcessor: self.type } = new { val postProcessor: self.type = self } with ByteCodeRepository
+  val localOpt            : LocalOpt            { val postProcessor: self.type } = new { val postProcessor: self.type = self } with LocalOpt
+  val inliner             : Inliner             { val postProcessor: self.type } = new { val postProcessor: self.type = self } with Inliner
+  val inlinerHeuristics   : InlinerHeuristics   { val postProcessor: self.type } = new { val postProcessor: self.type = self } with InlinerHeuristics
+  val closureOptimizer    : ClosureOptimizer    { val postProcessor: self.type } = new { val postProcessor: self.type = self } with ClosureOptimizer
+  val callGraph           : CallGraph           { val postProcessor: self.type } = new { val postProcessor: self.type = self } with CallGraph
   val bTypesFromClassfile : BTypesFromClassfile { val postProcessor: self.type } = new { val postProcessor: self.type = self } with BTypesFromClassfile
 
   // re-initialized per run because it reads compiler settings that might change
-  lazy val classfileWriter: LazyVar[ClassfileWriter] = perRunLazy(this)(new ClassfileWriter(frontendAccess))
+  lazy val classfileWriter: LazyVar[ClassfileWriter] =
+    perRunLazy(this)(new ClassfileWriter(frontendAccess, statistics))
 
   lazy val generatedClasses = recordPerRunCache(new ListBuffer[GeneratedClass])
 
@@ -41,10 +42,10 @@ abstract class PostProcessor extends PerRunInit {
     inlinerHeuristics.initialize()
   }
 
-  def postProcessAndSendToDisk(): Unit = {
-    runGlobalOptimizations()
+  def postProcessAndSendToDisk(classes: Traversable[GeneratedClass]): Unit = {
+    runGlobalOptimizations(classes)
 
-    for (GeneratedClass(classNode, sourceFile, isArtifact) <- generatedClasses) {
+    for (GeneratedClass(classNode, sourceFile, isArtifact) <- classes) {
       val bytes = try {
         if (!isArtifact) {
           localOptimizations(classNode)
@@ -72,17 +73,15 @@ abstract class PostProcessor extends PerRunInit {
         classfileWriter.get.write(classNode.name, bytes, sourceFile)
       }
     }
-
-    classfileWriter.get.close()
   }
 
-  def runGlobalOptimizations(): Unit = {
+  def runGlobalOptimizations(classes: Traversable[GeneratedClass]): Unit = {
     // add classes to the bytecode repo before building the call graph: the latter needs to
     // look up classes and methods in the code repo.
-    if (compilerSettings.optAddToBytecodeRepository) for (c <- generatedClasses) {
+    if (compilerSettings.optAddToBytecodeRepository) for (c <- classes) {
       byteCodeRepository.add(c.classNode, Some(c.sourceFile.canonicalPath))
     }
-    if (compilerSettings.optBuildCallGraph) for (c <- generatedClasses if !c.isArtifact) {
+    if (compilerSettings.optBuildCallGraph) for (c <- classes if !c.isArtifact) {
       // skip call graph for mirror / bean: we don't inline into them, and they are not referenced from other classes
       callGraph.addClass(c.classNode)
     }
@@ -93,7 +92,7 @@ abstract class PostProcessor extends PerRunInit {
   }
 
   def localOptimizations(classNode: ClassNode): Unit = {
-    BackendStats.timed(BackendStats.methodOptTimer)(localOpt.methodOptimizations(classNode))
+    statistics.timed(statistics.methodOptTimer)(localOpt.methodOptimizations(classNode))
   }
 
   def setInnerClasses(classNode: ClassNode): Unit = {

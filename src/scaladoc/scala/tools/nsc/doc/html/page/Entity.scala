@@ -90,15 +90,13 @@ trait EntityPage extends HtmlPage {
                           mbr match {
                             case dtpl: DocTemplateEntity =>
                               dtpl.companion.fold(<span class="separator"></span>) { c: DocTemplateEntity =>
-                                <a class="object" href={relativeLinkTo(c)} title={c.comment.fold("")(com => Page.inlineToStr(com.short))}></a>
+                                <a class="object" href={relativeLinkTo(c)} title={memberToShortCommentTitleTag(c)}></a>
                               }
                             case _ => <span class="separator"></span>
                           }
                         }
-                        <a class={mbr.kind} href={relativeLinkTo(mbr)} title={mbr.comment.fold("")(com => Page.inlineToStr(com.short))}></a>
-                        <a href={relativeLinkTo(mbr)} title={mbr.comment.fold("")(com => Page.inlineToStr(com.short))}>
-                          {mbr.name}
-                        </a>
+                        <a class={mbr.kind} href={relativeLinkTo(mbr)} title={memberToShortCommentTitleTag(mbr)}></a>
+                        <a href={relativeLinkTo(mbr)} title={memberToShortCommentTitleTag(mbr)}>{mbr.name}</a>
                       </li>
 
                   // Get path from root
@@ -239,7 +237,7 @@ trait EntityPage extends HtmlPage {
             <span class="filtertype">Ordering</span>
             <ol>
               {
-                if (!universe.settings.docGroups.value || (tpl.members.map(_.group).distinct.length == 1))
+                if (!universe.settings.docGroups.value || tpl.members.map(_.group).distinct.forall(_ == ModelFactory.defaultGroup))
                   NodeSeq.Empty
                 else
                   <li class="group out"><span>Grouped</span></li>
@@ -255,7 +253,7 @@ trait EntityPage extends HtmlPage {
           </div>
           { if (tpl.linearizationTemplates.isEmpty && tpl.conversions.isEmpty) NodeSeq.Empty else
             {
-              if (!tpl.linearizationTemplates.isEmpty)
+              if (tpl.linearizationTemplates.nonEmpty)
                 <div class="ancestors">
                   <span class="filtertype">Inherited<br/>
                   </span>
@@ -265,7 +263,7 @@ trait EntityPage extends HtmlPage {
                 </div>
               else NodeSeq.Empty
             } ++ {
-              if (!tpl.conversions.isEmpty)
+              if (tpl.conversions.nonEmpty)
                 <div class="ancestors">
                   <span class="filtertype">Implicitly<br/>
                   </span>
@@ -467,6 +465,9 @@ trait EntityPage extends HtmlPage {
       <p class="shortcomment cmt">{ memberToUseCaseCommentHtml(mbr, isSelf) }{ inlineToHtml(comment.short) }</p>
     }
 
+  def memberToShortCommentTitleTag(mbr: MemberEntity): String =
+    mbr.comment.fold("")(comment => Page.inlineToStrForTitleTag(comment.short))
+
   def memberToInlineCommentHtml(mbr: MemberEntity, isSelf: Boolean): NodeSeq =
     <p class="comment cmt">{ inlineToHtml(mbr.comment.get.short) }</p>
 
@@ -633,7 +634,7 @@ trait EntityPage extends HtmlPage {
     }
 
     val selfType: NodeSeq = mbr match {
-      case dtpl: DocTemplateEntity if (isSelf && !dtpl.selfType.isEmpty && !isReduced) =>
+      case dtpl: DocTemplateEntity if (isSelf && dtpl.selfType.isDefined && !isReduced) =>
         <dt>Self Type</dt>
         <dd>{ typeToHtml(dtpl.selfType.get, hasLinks = true) }</dd>
       case _ => NodeSeq.Empty
@@ -646,7 +647,7 @@ trait EntityPage extends HtmlPage {
       def showArguments(annotation: Annotation) =
         !(annotationsWithHiddenArguments.contains(annotation.qualifiedName))
 
-      if (!mbr.annotations.isEmpty) {
+      if (mbr.annotations.nonEmpty) {
         <dt>Annotations</dt>
         <dd>{
             mbr.annotations.map { annot =>
@@ -699,7 +700,7 @@ trait EntityPage extends HtmlPage {
                  exampleXml.reduceLeft(_ ++ Text(", ") ++ _)
               }</ol>
             </div>
-	  }
+          }
 
         val version: NodeSeq =
           orEmpty(comment.version) {
@@ -897,9 +898,7 @@ trait EntityPage extends HtmlPage {
             }
           }
           if (!nameLink.isEmpty)
-            <a title={mbr.comment.fold("")(c => Page.inlineToStr(c.short))} href={nameLink}>
-              {nameHtml}
-            </a>
+            <a title={memberToShortCommentTitleTag(mbr)} href={nameLink}>{nameHtml}</a>
           else nameHtml
         }{
           def tparamsToHtml(mbr: Any): NodeSeq = mbr match {
@@ -963,7 +962,7 @@ trait EntityPage extends HtmlPage {
             case alt: MemberEntity with AliasType =>
               <span class="result alias"> = { typeToHtml(alt.alias, hasLinks) }</span>
 
-            case tpl: MemberTemplateEntity if !tpl.parentTypes.isEmpty =>
+            case tpl: MemberTemplateEntity if tpl.parentTypes.nonEmpty =>
               <span class="result"> extends { typeToHtml(tpl.parentTypes.map(_._2), hasLinks) }</span>
 
             case _ => NodeSeq.Empty

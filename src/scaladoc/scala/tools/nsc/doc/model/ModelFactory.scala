@@ -30,12 +30,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) {
   import global._
   import definitions.{ ObjectClass, NothingClass, AnyClass, AnyValClass, AnyRefClass }
   import rootMirror.{ RootPackage, EmptyPackage }
-
-  // Defaults for member grouping, that may be overridden by the template
-  val defaultGroup = "Ungrouped"
-  val defaultGroupName = "Ungrouped"
-  val defaultGroupDesc = None
-  val defaultGroupPriority = 1000
+  import ModelFactory._
 
   def templatesCount = docTemplatesCache.count(_._2.isDocTemplate) - droppedPackages.size
 
@@ -209,7 +204,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) {
       }
 
       def tParams(mbr: Any): String = mbr match {
-        case hk: HigherKinded if !hk.typeParams.isEmpty =>
+        case hk: HigherKinded if hk.typeParams.nonEmpty =>
           def boundsToString(hi: Option[TypeEntity], lo: Option[TypeEntity]): String = {
             def bound0(bnd: Option[TypeEntity], pre: String): String = bnd match {
               case None => ""
@@ -969,7 +964,7 @@ class ModelFactory(val global: Global, val settings: doc.Settings) {
     while ((sym1 != NoSymbol) && (path.isEmpty || !stop(sym1))) {
       val sym1Norm = normalizeTemplate(sym1)
       if (!sym1.sourceModule.isPackageObject && sym1Norm != RootPackage) {
-        if (path.length != 0)
+        if (path.nonEmpty)
           path.insert(0, ".")
         path.insert(0, sym1Norm.nameString)
         // path::= sym1Norm
@@ -1028,4 +1023,11 @@ class ModelFactory(val global: Global, val settings: doc.Settings) {
     (bSym.isAliasType || bSym.isAbstractType) &&
     { val rawComment = global.expandedDocComment(bSym, inTpl.sym)
       rawComment.contains("@template") || rawComment.contains("@documentable") }
+}
+object ModelFactory {
+  // Defaults for member grouping, that may be overridden by the template
+  val defaultGroup = "Ungrouped"
+  val defaultGroupName = "Ungrouped"
+  val defaultGroupDesc = None
+  val defaultGroupPriority = 1000
 }

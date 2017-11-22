@@ -17,7 +17,6 @@ import scala.util.Properties.jdkHome
 import scala.tools.nsc.util.{ClassPath, stringFromStream}
 import scala.reflect.classTag
 import scala.reflect.internal.util.{BatchSourceFile, ScalaClassLoader, NoPosition}
-import ScalaClassLoader._
 import scala.reflect.io.{Directory, File, Path}
 import scala.tools.util._
 import io.AbstractFile
@@ -946,8 +945,7 @@ class ILoop(in0: Option[BufferedReader], protected val out: JPrintWriter) extend
   /** Start an interpreter with the given settings.
    *  @return true if successful
    */
-  def process(settings: Settings): Boolean = savingContextLoader {
-
+  def process(settings: Settings): Boolean = {
     // yes this is sad
     val runnerSettings = settings match {
       case generic: GenericRunnerSettings => Some(generic)
@@ -1007,28 +1005,10 @@ class ILoop(in0: Option[BufferedReader], protected val out: JPrintWriter) extend
         }
       case _ =>
     }
-    // wait until after startup to enable noisy settings
-    def withSuppressedSettings[A](body: => A): A = {
-      val ss = this.settings
-      import ss._
-      val noisy = List(Xprint, Ytyperdebug, browse)
-      val noisesome = noisy.exists(!_.isDefault)
-      val current = (Xprint.value, Ytyperdebug.value, browse.value)
-      if (isReplDebug || !noisesome) body
-      else {
-        this.settings.Xprint.value = List.empty
-        this.settings.browse.value = List.empty
-        this.settings.Ytyperdebug.value = false
-        try body
-        finally {
-          Xprint.value       = current._1
-          Ytyperdebug.value  = current._2
-          browse.value      = current._3
-          intp.global.printTypings = current._2
-        }
-      }
-    }
-    def startup(): String = withSuppressedSettings {
+    // ctl-D on first line of repl zaps the intp
+    def globalOrNull = if (intp != null) intp.global else null
+    // wait until after startup to enable noisy settings; intp is used only after body completes
+    def startup(): String = IMain.withSuppressedSettings(settings, globalOrNull) {
       // -e is non-interactive
       val splash =
         runnerSettings.filter(_.execute.isSetByUser).map(ss => batchLoop(ss.execute.value)).getOrElse {
@@ -1061,6 +1041,8 @@ class ILoop(in0: Option[BufferedReader], protected val out: JPrintWriter) extend
           }
           line
         }
+      } catch {
+        case t: Throwable => t.printStackTrace() ; scala.sys.exit(1)
       } finally splash.stop()
     }
     this.settings = settings

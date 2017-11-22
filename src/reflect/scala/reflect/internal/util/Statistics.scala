@@ -3,51 +3,62 @@ package reflect.internal.util
 
 import scala.collection.mutable
 
-object Statistics {
+import scala.reflect.internal.SymbolTable
+import scala.reflect.internal.settings.MutableSettings
+import java.lang.invoke.{SwitchPoint, MethodHandle, MethodHandles, MethodType}
+
+abstract class Statistics(val symbolTable: SymbolTable, settings: MutableSettings) {
+
+  initFromSettings(settings)
+
+  def initFromSettings(currentSettings: MutableSettings): Unit = {
+    enabled = currentSettings.YstatisticsEnabled
+    hotEnabled = currentSettings.YhotStatisticsEnabled
+  }
 
   type TimerSnapshot = (Long, Long)
 
   /** If enabled, increment counter by one */
   @inline final def incCounter(c: Counter) {
-    if (_enabled && c != null) c.value += 1
+    if (areStatisticsLocallyEnabled && c != null) c.value += 1
   }
 
   /** If enabled, increment counter by given delta */
   @inline final def incCounter(c: Counter, delta: Int) {
-    if (_enabled && c != null) c.value += delta
+    if (areStatisticsLocallyEnabled && c != null) c.value += delta
   }
 
   /** If enabled, increment counter in map `ctrs` at index `key` by one */
   @inline final def incCounter[K](ctrs: QuantMap[K, Counter], key: K) =
-    if (_enabled && ctrs != null) ctrs(key).value += 1
+    if (areStatisticsLocallyEnabled && ctrs != null) ctrs(key).value += 1
 
   /** If enabled, start subcounter. While active it will track all increments of
    *  its base counter.
    */
   @inline final def startCounter(sc: SubCounter): (Int, Int) =
-    if (_enabled && sc != null) sc.start() else null
+    if (areStatisticsLocallyEnabled && sc != null) sc.start() else null
 
   /** If enabled, stop subcounter from tracking its base counter. */
   @inline final def stopCounter(sc: SubCounter, start: (Int, Int)) {
-    if (_enabled && sc != null) sc.stop(start)
+    if (areStatisticsLocallyEnabled && sc != null) sc.stop(start)
   }
 
   /** If enabled, start timer */
   @inline final def startTimer(tm: Timer): TimerSnapshot =
-    if (_enabled && tm != null) tm.start() else null
+    if (areStatisticsLocallyEnabled && tm != null) tm.start() else null
 
   /** If enabled, stop timer */
   @inline final def stopTimer(tm: Timer, start: TimerSnapshot) {
-    if (_enabled && tm != null) tm.stop(start)
+    if (areStatisticsLocallyEnabled && tm != null) tm.stop(start)
   }
 
   /** If enabled, push and start a new timer in timer stack */
   @inline final def pushTimer(timers: TimerStack, timer: => StackableTimer): TimerSnapshot =
-    if (_enabled && timers != null) timers.push(timer) else null
+    if (areStatisticsLocallyEnabled && timers != null) timers.push(timer) else null
 
   /** If enabled, stop and pop timer from timer stack */
   @inline final def popTimer(timers: TimerStack, prev: TimerSnapshot) {
-    if (_enabled && timers != null) timers.pop(prev)
+    if (areStatisticsLocallyEnabled && timers != null) timers.pop(prev)
   }
 
   /** Create a new counter that shows as `prefix` and is active in given phases */
@@ -110,7 +121,7 @@ quant)
    *  Quantities with non-empty prefix are printed in the statistics info.
    */
   trait Quantity {
-    if (enabled && prefix.nonEmpty) {
+    if (prefix.nonEmpty) {
       val key = s"${if (underlying != this) underlying.prefix else ""}/$prefix"
       qs(key) = this
     }
@@ -247,29 +258,34 @@ quant)
     }
   }
 
-  private var _enabled = false
   private val qs = new mutable.HashMap[String, Quantity]
+  private[scala] var areColdStatsLocallyEnabled: Boolean = false
+  private[scala] var areHotStatsLocallyEnabled: Boolean = false
 
-  /** replace with
-   *
-   *    final val canEnable = false
-   *
-   *  to remove all Statistics code from build
-   */
-  final val canEnable = _enabled
-
-  /** replace with
-   *
-   *   final def hotEnabled = _enabled
-   *
-   * and rebuild, to also count tiny but super-hot methods
-   * such as phase, flags, owner, name.
-   */
-  final val hotEnabled = false
-
-  def enabled = _enabled
+  /** Represents whether normal statistics can or cannot be enabled. */
+  @inline final def enabled: Boolean = areColdStatsLocallyEnabled
   def enabled_=(cond: Boolean) = {
-    if (cond && !_enabled) {
+    if (cond && !enabled) {
+      StatisticsStatics.enableColdStats()
+      areColdStatsLocallyEnabled = true
+    }
+  }
+
+  /** Represents whether hot statistics can or cannot be enabled. */
+  @inline final def hotEnabled: Boolean = enabled && areHotStatsLocallyEnabled
+  def hotEnabled_=(cond: Boolean) = {
+    if (cond && enabled && !areHotStatsLocallyEnabled) {
+      StatisticsStatics.enableHotStats()
+      areHotStatsLocallyEnabled = true
+    }
+  }
+
+  /** Tells whether statistics should be definitely reported to the user for this `Global` instance. */
+  @inline final def areStatisticsLocallyEnabled: Boolean = areColdStatsLocallyEnabled
+
+  import scala.reflect.internal.Reporter
+  /** Reports the overhead of measuring statistics via the nanoseconds variation. */
+  final def reportStatisticsOverhead(reporter: Reporter): Unit = {
       val start = System.nanoTime()
       var total = 0L
       for (i <- 1 to 10000) {
@@ -277,9 +293,13 @@ quant)
         total += System.nanoTime() - time
       }
       val total2 = System.nanoTime() - start
-      println("Enabling statistics, measuring overhead = "+
-              total/10000.0+"ns to "+total2/10000.0+"ns per timer")
-      _enabled = true
-    }
+      val variation = s"${total/10000.0}ns to ${total2/10000.0}ns"
+      reporter.echo(NoPosition, s"Enabling statistics, measuring overhead = $variation per timer")
+  }
+
+  /** Helper for measuring the overhead of a concrete thunk `body`. */
+  final def timed[T](timer: Timer)(body: => T): T = {
+    val start = startTimer(timer)
+    try body finally stopTimer(timer, start)
   }
 }

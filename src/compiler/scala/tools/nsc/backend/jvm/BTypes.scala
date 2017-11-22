@@ -6,7 +6,6 @@
 package scala.tools.nsc
 package backend.jvm
 
-import scala.collection.concurrent.TrieMap
 import scala.collection.{concurrent, mutable}
 import scala.tools.asm
 import scala.tools.asm.Opcodes
@@ -41,8 +40,8 @@ abstract class BTypes {
 
   // Concurrent maps because stack map frames are computed when in the class writer, which
   // might run on multiple classes concurrently.
-  val classBTypeCacheFromSymbol: concurrent.Map[InternalName, ClassBType] = recordPerRunCache(TrieMap.empty)
-  val classBTypeCacheFromClassfile: concurrent.Map[InternalName, ClassBType] = recordPerRunCache(TrieMap.empty)
+  val classBTypeCacheFromSymbol: concurrent.Map[InternalName, ClassBType] = recordPerRunCache(FlatConcurrentHashMap.empty)
+  val classBTypeCacheFromClassfile: concurrent.Map[InternalName, ClassBType] = recordPerRunCache(FlatConcurrentHashMap.empty)
 
   /**
    * A BType is either a primitive type, a ClassBType, an ArrayBType of one of these, or a MethodType
@@ -695,10 +694,9 @@ abstract class BTypes {
           internalName,
           outerName.orNull,
           innerName.orNull,
-          GenBCode.mkFlags(
-            // the static flag in the InnerClass table has a special meaning, see InnerClass comment
-            i.flags & ~Opcodes.ACC_STATIC,
-            if (isStaticNestedClass) Opcodes.ACC_STATIC else 0
+          // the static flag in the InnerClass table has a special meaning, see InnerClass comment
+          ( i.flags & ~Opcodes.ACC_STATIC |
+              (if (isStaticNestedClass) Opcodes.ACC_STATIC else 0)
           ) & BCodeHelpers.INNER_CLASSES_FLAGS
         )
     })
@@ -1030,4 +1028,9 @@ object BTypes {
 
   // when inlining, local variable names of the callee are prefixed with the name of the callee method
   val InlinedLocalVariablePrefixMaxLenght = 128
+}
+object FlatConcurrentHashMap {
+  import collection.JavaConverters._
+  def empty[K,V]: concurrent.Map[K,V] =
+    new java.util.concurrent.ConcurrentHashMap[K,V].asScala
 }
