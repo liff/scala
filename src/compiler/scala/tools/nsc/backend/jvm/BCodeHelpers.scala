@@ -818,9 +818,9 @@ abstract class BCodeHelpers extends BCodeIdiomatic {
        */
       // TODO: evaluate the other flags we might be dropping on the floor here.
       // TODO: ACC_SYNTHETIC ?
-      val flags = GenBCode.PublicStatic | (
-        if (m.isVarargsMethod) asm.Opcodes.ACC_VARARGS else 0
-      )
+      val flags = GenBCode.PublicStatic |
+        (if (m.isVarargsMethod) asm.Opcodes.ACC_VARARGS else 0) |
+        (if (m.isDeprecated) asm.Opcodes.ACC_DEPRECATED else 0)
 
       // TODO needed? for(ann <- m.annotations) { ann.symbol.initialize }
       val jgensig = staticForwarderGenericSignature
@@ -839,6 +839,7 @@ abstract class BCodeHelpers extends BCodeIdiomatic {
         mkArray(thrownExceptions)
       )
 
+      emitParamNames(mirrorMethod, m.info.params)
       emitAnnotations(mirrorMethod, others)
       emitParamAnnotations(mirrorMethod, m.info.params.map(_.annotations))
 

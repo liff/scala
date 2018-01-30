@@ -71,7 +71,7 @@ abstract class SymbolTable extends macros.Universe
 
   def shouldLogAtThisPhase = false
   def isPastTyper = false
-  protected def isDeveloper: Boolean = settings.debug
+  def isDeveloper: Boolean = settings.debug
 
   @deprecated("use devWarning if this is really a warning; otherwise use log", "2.11.0")
   def debugwarn(msg: => String): Unit = devWarning(msg)
@@ -365,9 +365,15 @@ abstract class SymbolTable extends macros.Universe
     // letting us know when a cache is really out of commission.
     import java.lang.ref.WeakReference
     private var caches = List[WeakReference[Clearable]]()
+    private var javaCaches = List[JavaClearable[_]]()
 
     def recordCache[T <: Clearable](cache: T): T = {
-      caches ::= new WeakReference(cache)
+      cache match {
+        case jc: JavaClearable[_] =>
+          javaCaches ::= jc
+        case _ =>
+          caches ::= new WeakReference(cache)
+      }
       cache
     }
 
@@ -376,13 +382,21 @@ abstract class SymbolTable extends macros.Universe
      * compiler and then inspect the state of a cache.
      */
     def unrecordCache[T <: Clearable](cache: T): Unit = {
-      caches = caches.filterNot(_.get eq cache)
+      cache match {
+        case jc: JavaClearable[_] =>
+          javaCaches = javaCaches.filterNot(cache == _)
+        case _ =>
+          caches = caches.filterNot(_.get eq cache)
+      }
     }
 
     def clearAll() = {
-      debuglog("Clearing " + caches.size + " caches.")
+      debuglog("Clearing " + (caches.size + javaCaches.size) + " caches.")
       caches foreach (ref => Option(ref.get).foreach(_.clear))
       caches = caches.filterNot(_.get == null)
+
+      javaCaches foreach (_.clear)
+      javaCaches = javaCaches.filter(_.isValid)
     }
 
     def newWeakMap[K, V]()        = recordCache(mutable.WeakHashMap[K, V]())

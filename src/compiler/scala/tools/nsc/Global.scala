@@ -287,7 +287,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
       body
   }
 
-  override protected def isDeveloper = settings.developer || super.isDeveloper
+  override def isDeveloper = settings.developer || super.isDeveloper
 
   /** This is for WARNINGS which should reach the ears of scala developers
    *  whenever they occur, but are not useful for normal users. They should
@@ -1347,7 +1347,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     def compiles(sym: Symbol): Boolean =
       if (sym == NoSymbol) false
       else if (symSource.isDefinedAt(sym)) true
-      else if (!sym.isTopLevel) compiles(sym.enclosingTopLevelClassOrDummy)
+      else if (!sym.isTopLevel) compiles(sym.originalEnclosingTopLevelClassOrDummy)
       else if (sym.isModuleClass) compiles(sym.sourceModule)
       else false
 

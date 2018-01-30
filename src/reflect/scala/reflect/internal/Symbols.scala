@@ -217,7 +217,9 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     // makes sure that all symbols that runtime reflection deals with are synchronized
     private def isSynchronized = this.isInstanceOf[scala.reflect.runtime.SynchronizedSymbols#SynchronizedSymbol]
     private def isAprioriThreadsafe = isThreadsafe(AllOps)
-    assert(isCompilerUniverse || isSynchronized || isAprioriThreadsafe, s"unsafe symbol $initName (child of $initOwner) in runtime reflection universe")
+
+    if (!(isCompilerUniverse || isSynchronized || isAprioriThreadsafe))
+      throw new AssertionError(s"unsafe symbol $initName (child of $initOwner) in runtime reflection universe") // Not an assert to avoid retention of `initOwner` as a field!
 
     type AccessBoundaryType = Symbol
     type AnnotationType     = AnnotationInfo
@@ -2206,30 +2208,30 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       else if (isMethod || isClass || this == NoSymbol) this
       else owner.logicallyEnclosingMember
 
-    /** The top-level class containing this symbol. */
+    /** The top-level class containing this symbol, using the current owner chain. */
     def enclosingTopLevelClass: Symbol =
       if (isTopLevel) {
         if (isClass) this else moduleClass
       } else owner.enclosingTopLevelClass
 
-    /** The top-level class or local dummy symbol containing this symbol. */
-    def enclosingTopLevelClassOrDummy: Symbol =
+    /** The top-level class or local dummy symbol containing this symbol, using the original owner chain. */
+    def originalEnclosingTopLevelClassOrDummy: Symbol =
       if (isTopLevel) {
         if (isClass) this else moduleClass.orElse(this)
-      } else owner.enclosingTopLevelClassOrDummy
+      } else originalOwner.originalEnclosingTopLevelClassOrDummy
 
     /** Is this symbol defined in the same scope and compilation unit as `that` symbol? */
-    def isCoDefinedWith(that: Symbol) = (
-         !rawInfoIsNoType
-      && (this.effectiveOwner == that.effectiveOwner)
-      && (   !this.effectiveOwner.isPackageClass
-          || (this.associatedFile eq NoAbstractFile)
-          || (that.associatedFile eq NoAbstractFile)
-          || (this.associatedFile.path == that.associatedFile.path)  // Cheap possibly wrong check, then expensive normalization
-          || (this.associatedFile.canonicalPath == that.associatedFile.canonicalPath)
-         )
-    )
-
+    def isCoDefinedWith(that: Symbol) = {
+      !rawInfoIsNoType                               &&
+        (this.effectiveOwner == that.effectiveOwner) &&
+        (!this.effectiveOwner.isPackageClass             || { val thisFile = this.associatedFile
+          (thisFile eq NoAbstractFile)                   || { val thatFile = that.associatedFile
+          (thatFile eq NoAbstractFile)                   ||
+          (thisFile.path == thatFile.path)               ||      // Cheap possibly wrong check
+          (thisFile.canonicalPath == thatFile.canonicalPath)
+          }}
+          )
+    }
     /** The internal representation of classes and objects:
      *
      *  class Foo is "the class" or sometimes "the plain class"
@@ -2384,11 +2386,26 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       } else Nil
     }
 
+    private[this] var isOverridingSymbolCache = 0
+
     /** Equivalent to allOverriddenSymbols.nonEmpty, but more efficient. */
-    lazy val isOverridingSymbol = (
+    private def computeIsOverridingSymbol: Boolean = (
          canMatchInheritedSymbols
       && owner.ancestors.exists(base => overriddenSymbol(base) != NoSymbol)
     )
+    final def isOverridingSymbol: Boolean = {
+      val curRunId = currentRunId
+      // TODO this cache can lead to incorrect answers if the overrider/overridee relationship changes
+      // with the passage of compiler phases. Details: https://github.com/scala/scala/pull/6197#discussion_r161427280
+      // When fixing this problem (e.g. by ignoring the cache after erasure?), be mindful of performance
+      if (isOverridingSymbolCache == curRunId) true
+      else if (isOverridingSymbolCache == -curRunId) false
+      else {
+        val result = computeIsOverridingSymbol
+        isOverridingSymbolCache = (if (result) 1 else -1) * curRunId
+        result
+      }
+    }
 
     /** Equivalent to allOverriddenSymbols.head (or NoSymbol if no overrides) but more efficient. */
     def nextOverriddenSymbol: Symbol = {
@@ -2509,8 +2526,10 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     // file to also store the classfile, but without changing the behavior
     // of sourceFile (which is expected at least in the IDE only to
     // return actual source code.) So sourceFile has classfiles filtered out.
-    final def sourceFile: AbstractFile =
-      if ((associatedFile eq NoAbstractFile) || (associatedFile.path endsWith ".class")) null else associatedFile
+    final def sourceFile: AbstractFile = {
+      val file = associatedFile
+      if ((file eq NoAbstractFile) || (file.path endsWith ".class")) null else file
+    }
 
     /** Overridden in ModuleSymbols to delegate to the module class.
      *  Never null; if there is no associated file, returns NoAbstractFile.
@@ -2843,16 +2862,14 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       this
     }
 
-    private val validAliasFlags = SUPERACCESSOR | PARAMACCESSOR | MIXEDIN | SPECIALIZED
-
     override def alias: Symbol =
-      if (hasFlag(validAliasFlags)) initialize.referenced
+      if (hasFlag(ValidAliasFlags)) initialize.referenced
       else NoSymbol
 
     def setAlias(alias: Symbol): TermSymbol = {
       assert(alias != NoSymbol, this)
       assert(!alias.isOverloaded, alias)
-      assert(hasFlag(validAliasFlags), this)
+      assert(hasFlag(ValidAliasFlags), this)
 
       referenced = alias
       this
@@ -3553,7 +3570,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     override def enclClassChain = Nil
     override def enclClass: Symbol = this
     override def enclosingTopLevelClass: Symbol = this
-    override def enclosingTopLevelClassOrDummy: Symbol = this
+    override def originalEnclosingTopLevelClassOrDummy: Symbol = this
     override def enclosingPackageClass: Symbol = this
     override def enclMethod: Symbol = this
     override def associatedFile = NoAbstractFile
